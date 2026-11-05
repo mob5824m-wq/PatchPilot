@@ -163,12 +163,31 @@ PatchPilot reports its own version at `/api/health`, in the UI footer, and via `
 
 ## Android app
 
-`android/` contains PatchPilot for Android: a small, dependency-free WebView client that talks to the PatchPilot server
-running on your computer, so the verified APK can be saved straight into `Downloads/PatchPilot/` on the phone where
-Morphe Manager's *Select an APK* picker expects it. Every release attaches an installable APK.
+`android/` contains PatchPilot for Android — a **standalone** app. It reads the patch bundles, finds the exact build on
+APKPure or APKMirror, downloads it, verifies it on the device and puts it in `Downloads/PatchPilot/`, right where
+Morphe Manager's *Select an APK* picker expects it. No computer, no server, no network setup. Every release attaches an
+installable APK.
 
-It is a client, not a self-contained downloader — the catalog, the mirrors and the signature checks stay on the server.
-See [android/README.md](android/README.md) for building it, the four signing secrets, and why it has no Gradle wrapper.
+Nothing was reimplemented for the phone. The React UI is the same build, and the catalog, the mirror scrapers, the job
+runner and the verification rules are the same TypeScript, running inside the Android WebView:
+
+```
+React UI (src/web)                 unchanged — still calls /api/...
+      ▼
+in-page backend (src/app)          answers /api/... on the device
+      ▼
+NativeShell.java                   sockets · files · PackageManager · MediaStore
+      ▼
+APKPure / APKMirror            Downloads/PatchPilot
+```
+
+Only what Android alone can do lives in Java: HTTP with a cookie jar and real redirect control, the filesystem, the
+public Downloads folder, and asking `PackageManager` what an APK actually is (package, version, signing certificate
+digests). The comparison against the bundle is shared with the server, so a file is accepted or rejected for the same
+reasons on both platforms. `test/standalone.test.ts` drives the whole standalone stack against a fake shell.
+
+See [android/README.md](android/README.md) for the layout, the build, the four signing secrets, and why it has no Gradle
+wrapper.
 
 ## Configuration
 

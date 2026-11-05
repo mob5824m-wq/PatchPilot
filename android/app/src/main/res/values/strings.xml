@@ -1,16 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PatchPilot</string>
-    <string name="server_hint">http://192.168.1.20:3000</string>
-    <string name="server_title">PatchPilot server</string>
-    <string name="server_message">PatchPilot runs on your computer. Start it there with \u201cnpm start\u201d, then enter the address it prints here. Both devices need to be on the same network.</string>
-    <string name="server_save">Connect</string>
-    <string name="server_cancel">Cancel</string>
-    <string name="server_invalid">That does not look like an address. Try something like http://192.168.1.20:3000</string>
-    <string name="reload">Reload</string>
-    <string name="offline">Can\u2019t reach %1$s. Check that PatchPilot is running and that this phone is on the same network.</string>
-    <string name="download_started">Downloading %1$s to Downloads/PatchPilot</string>
-    <string name="download_failed">Nothing to download from that link</string>
-    <string name="permission_needed">Storage permission is needed to save the APK into Downloads</string>
-    <string name="open_external">Opened in your browser</string>
 </resources>

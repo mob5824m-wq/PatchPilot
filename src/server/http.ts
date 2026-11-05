@@ -1,4 +1,4 @@
-import { USER_AGENT } from './config.ts';
+import { buildUserAgent } from '../shared/userAgent.ts';
 
 /**
  * HTTP helpers with predictable timeouts and error messages.
@@ -7,6 +7,28 @@ import { USER_AGENT } from './config.ts';
  * are often behind Cloudflare, rate limits or geo-blocks, so every failure has to
  * come back as a sentence a person can act on rather than "fetch failed".
  */
+
+/**
+ * The server sets this to its real version. The Android build sets it at
+ * startup too, so mirror operators see one consistent client either way.
+ */
+let userAgent = buildUserAgent('dev');
+export function setUserAgent(value: string): void {
+  userAgent = value;
+}
+
+/**
+ * The transport is swappable so the same provider code can run against the
+ * platform fetch on a server and through the Android shell on a phone, where
+ * the WebView cannot reach mirror hosts directly (CORS) and the shell owns the
+ * sockets. Tests use it too.
+ */
+type Fetcher = (input: string, init: RequestInit) => Promise<Response>;
+let fetcher: Fetcher = (input, init) => fetch(input, init);
+
+export function setFetchImplementation(implementation: Fetcher): void {
+  fetcher = implementation;
+}
 
 export interface FetchOptions extends RequestInit {
   timeoutMs?: number;
@@ -63,13 +85,13 @@ function describeNetworkError(error: unknown, url: string): string {
 export async function request(url: string, options: FetchOptions = {}): Promise<Response> {
   const { timeoutMs = 20_000, headers, ...init } = options;
   try {
-    return await fetch(url, {
+    return await fetcher(url, {
       ...init,
       redirect: init.redirect ?? 'follow',
       signal: init.signal ?? AbortSignal.timeout(timeoutMs),
       headers: {
         ...BROWSER_HEADERS,
-        'user-agent': USER_AGENT,
+        'user-agent': userAgent,
         ...headers,
       },
     });

@@ -1,30 +1,75 @@
 # PatchPilot for Android
 
-A thin client for the PatchPilot server. It is a WebView with three jobs: show the PatchPilot UI from the server on
-your computer, let you switch servers, and make sure a downloaded APK lands in `Downloads/PatchPilot/` where Morphe
-Manager's *Select an APK* picker can find it.
+A **standalone** app. No server, no computer, no network sharing: it reads the patch bundles, finds the exact APK a
+patch needs on APKPure or APKMirror, downloads it, verifies it on the device, and puts it in
+`Downloads/PatchPilot/` — where Morphe Manager's *Select an APK* picker can see it.
 
-It is **not** a standalone downloader. The catalog, the mirrors, the archives and the signature checks all live in the
-Node server; the phone is the screen and the destination. That is deliberate — the server does the work once, and the
-APK stays small and dependency-free.
+Every release attaches an installable APK (`patchpilot-android-<version>.apk`).
+
+## How a standalone app reuses a server codebase
+
+The UI was written as a React client of PatchPilot's JSON API. Rather than rewrite it in Android views, the app keeps
+the UI **and the backend logic**, and replaces only the layer underneath:
+
+```
+React UI (src/web)                     unchanged, still calls /api/...
+        │  fetch('/api/catalog'), EventSource('/api/downloads/:id/events')
+        ▼
+in-page backend (src/app)              answers those calls inside the WebView
+        │  catalog · providers · jobs · library · bundle registry
+        ▼
+NativeShell.java                       the only platform-specific code
+        │  sockets · files · PackageManager · MediaStore
+        ▼
+APKPure / APKMirror                 Downloads/PatchPilot
+```
+
+That means the mirror scrapers, the bundle parsers and the verification rules are *the same code* the desktop build
+runs — and the same tests cover them (`test/providers.test.ts`, `test/standalone.test.ts`). Nothing is reimplemented in
+Java except what only Android can do.
+
+Key pieces:
+
+| Path | Role |
+| --- | --- |
+| `src/app/install.ts` | Detects the shell at startup, installs the `/api` fetch shim, the `EventSource` shim and the mirror transport |
+| `src/app/router.ts` | The JSON API, implemented in the page |
+| `src/app/jobs.ts` | Job runner: ask each source, download, verify, file it |
+| `src/app/bundles.ts` | Bundle registry; seeds from `fixtures/bundles`, refreshes from GitHub |
+| `src/app/mpp.ts` | Reads `.mpp` archives with `DecompressionStream` (no zip dependency) |
+| `src/web/*` | Shared UI, untouched |
+| `android/app/src/main/java/app/patchpilot/` | `MainActivity` (WebView + assets), `NativeShell` (JS bridge), `HttpBridge`, `ApkInspector`, `LibraryStore` |
+
+## Verification, on the phone
+
+The desktop build decodes the binary manifest and the APK Signing Block itself. Android already does both properly, so
+`ApkInspector` asks `PackageManager` for the package name, version name, version code and the SHA-256 of every signing
+certificate — the exact digests the patch bundles pin. Split bundles (`.apkm`, `.xapk`, `.apks`) are opened as zips and
+their base APK is inspected the same way.
+
+The comparison against the bundle (`src/shared/verifyMeta.ts`) is shared with the server, so the same file is accepted
+or rejected for the same reasons on both platforms. A rejected download is deleted, never published.
 
 ## Build
 
-The release workflow builds this on every merge to `main` and attaches the APK to the GitHub release, so nobody needs a
-local Android SDK to get a working build. To build it yourself:
+The release workflow builds this on every merge to `main`, so nobody needs an Android SDK to get a working build:
 
 ```bash
-# Needs JDK 17 and an Android SDK (compileSdk 35). Gradle 8.9+ required by AGP 8.7.
+npm ci && npm run build          # the UI must exist before Gradle runs: the APK carries dist/web
 cd android
-gradle assembleRelease         # app/build/outputs/apk/release/app-release.apk
+gradle assembleRelease           # app/build/outputs/apk/release/app-release.apk
 gradle assembleRelease -PpatchPilotVersion=1.2.3
 ```
 
-There is no Gradle wrapper in the repository on purpose: the wrapper jar is a binary blob, and CI pins the Gradle
-version instead (`gradle/actions/setup-gradle`). Run `gradle wrapper` once if you would rather have one locally.
+Needs JDK 17, Gradle 8.9+ (AGP 8.7.3) and an Android SDK with `compileSdk 35`. There is no Gradle wrapper in the
+repository on purpose — the wrapper jar is a binary blob and CI pins the Gradle version instead
+(`gradle/actions/setup-gradle`). Run `gradle wrapper` once if you prefer one locally.
 
 `-PpatchPilotVersion` sets both `versionName` and `versionCode` (`1.2.3` → `10203`). Without it the APK reports
-`0.0.0`; the release workflow always passes the tag it is publishing.
+`0.0.0`; the release workflow always passes the tag it is publishing, and the app shows that version in its footer.
+
+The web bundle is copied into `app/src/main/assets/web/` by a `Sync` task at build time and is gitignored — one source
+of truth for the UI.
 
 ## Signing
 
@@ -37,25 +82,23 @@ version instead (`gradle/actions/setup-gradle`). Run `gradle wrapper` once if yo
 | `PATCHPILOT_KEY_ALIAS` | Key alias |
 | `PATCHPILOT_KEY_PASSWORD` | Key password |
 
-With them set, the release APK is signed properly. Without them it falls back to the debug key, which **installs fine
-but cannot update an installation signed with a different key** — fine for trying it out, not for a real distribution.
-Add the four as repository secrets (base64 the keystore and decode it in the workflow) to get stable signatures.
+With them set the release APK is signed properly. Without them it falls back to the debug key, which **installs fine
+but cannot update an installation signed with a different key** — fine for trying it out, not for distribution.
 
-## What it asks for
+## Permissions
 
-- `INTERNET` — to reach your server; plain `http://` is allowed because home networks rarely have certificates.
-- `WRITE_EXTERNAL_STORAGE` on Android 9 and older only, for the public `Downloads` folder.
+| Permission | Why |
+| --- | --- |
+| `INTERNET` | APKPure, APKMirror, GitHub, F-Droid |
+| `WRITE_EXTERNAL_STORAGE` (`maxSdkVersion=28`) | Writing into the public `Downloads` folder on Android 9 and older; Android 10+ uses MediaStore instead |
 
-The server address is the only setting. Tap the bar at the top to change it; the app remembers it, and
-`192.168.1.20:3000` is accepted and normalised to `http://192.168.1.20:3000`.
+No cleartext traffic: all requests go through `HttpBridge`, and the WebView only ever loads the app's own assets from
+`https://patchpilot.local/`.
 
-## Structure
+## Known limits
 
-```
-app/src/main/java/app/patchpilot/MainActivity.java   the whole app
-app/src/main/AndroidManifest.xml                     permissions, cleartext, launcher
-app/src/main/res/values/strings.xml                  UI text
-```
-
-No AndroidX, no Compose, no third-party dependencies: an `Activity`, a `WebView`, a `DownloadManager`, and the
-framework file picker (`<input type="file">` in the web UI has to keep working).
+- **Split bundles** are verified through their base APK. The bundle is saved intact, but PatchPilot cannot prove the
+  config splits match — the same caveat the desktop build documents.
+- **No GitHub token**: authenticated GitHub requests are a desktop feature; the app uses the anonymous rate limit.
+- The app cannot be built or run in a CI container without an Android SDK; `test/standalone.test.ts` exercises the
+  standalone backend against a fake shell so the logic is covered regardless.

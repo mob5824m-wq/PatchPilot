@@ -2,6 +2,9 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BundleConfig, Settings } from '../shared/types.ts';
+import { defaultBundles, defaultSettings } from '../shared/defaults.ts';
+import { buildUserAgent } from '../shared/userAgent.ts';
+import { setUserAgent } from './http.ts';
 import { readJson, writeJson } from './store.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -42,7 +45,8 @@ export const offlineMode = process.env.PATCHPILOT_OFFLINE === '1' || process.env
 /** Enables the offline fixture provider used by tests and previews. */
 export const demoSourceEnabled = process.env.PATCHPILOT_DEMO === '1' || process.env.PATCHPILOT_DEMO === 'true';
 
-export const USER_AGENT = `PatchPilot/${APP_VERSION} (+https://github.com/mob5824m-wq/PatchPilot)`;
+export const USER_AGENT = buildUserAgent(APP_VERSION);
+setUserAgent(USER_AGENT);
 
 export function ensureDirs(): void {
   for (const dir of [dataDir, libraryDir, cacheDir, bundleCacheDir, uploadDir]) {
@@ -50,46 +54,17 @@ export function ensureDirs(): void {
   }
 }
 
-export const defaultBundles: BundleConfig[] = [
-  {
-    id: 'morphe-official',
-    name: 'Morphe Patches',
-    kind: 'github',
-    repo: 'MorpheApp/morphe-patches',
-    enabled: true,
-    builtin: true,
-  },
-  {
-    id: 'hxreborn',
-    name: 'hxreborn patches',
-    kind: 'github',
-    repo: 'hxreborn/morphe-patches',
-    enabled: true,
-    builtin: true,
-  },
-  {
-    id: 'piko',
-    name: 'Piko (Twitter/X & Instagram)',
-    kind: 'github',
-    repo: 'crimera/piko',
-    enabled: true,
-    builtin: true,
-  },
-];
+export { defaultBundles, defaultSettings };
 
-export const defaultSettings: Settings = {
-  providers: {},
-  preferAbi: null,
-  autoRefreshMinutes: 180,
-  demoSource: demoSourceEnabled,
-};
+/** The demo source is on only where the environment asks for it. */
+const settingsDefaults: Settings = { ...defaultSettings, demoSource: demoSourceEnabled };
 
 const settingsPath = join(dataDir, 'settings.json');
 const bundlesPath = join(dataDir, 'bundles.json');
 
 export async function loadSettings(): Promise<Settings> {
   const stored = await readJson<Partial<Settings>>(settingsPath, {});
-  return { ...defaultSettings, ...stored, providers: { ...stored.providers } };
+  return { ...settingsDefaults, ...stored, providers: { ...stored.providers } };
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

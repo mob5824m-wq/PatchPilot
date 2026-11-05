@@ -21,6 +21,27 @@ fun versionCodeFor(name: String): Int {
     return major * 10_000 + minor * 100 + patch
 }
 
+/**
+ * The web UI is built by Vite into `dist/web` and shipped inside the APK. Copying
+ * it here (rather than committing it) keeps one source of truth for the UI and
+ * guarantees the APK always carries the build the release workflow just made.
+ */
+val webBundle = file("../../dist/web")
+val copyWebAssets by tasks.registering(Sync::class) {
+    from(webBundle)
+    into(layout.projectDirectory.dir("src/main/assets/web"))
+    doFirst {
+        if (!File(webBundle, "index.html").exists()) {
+            throw GradleException(
+                "dist/web is missing. Run `npm ci && npm run build` in the repository root before building the APK " +
+                    "— the APK carries the web UI."
+            )
+        }
+    }
+}
+
+tasks.named("preBuild") { dependsOn(copyWebAssets) }
+
 android {
     namespace = "app.patchpilot"
     compileSdk = 35

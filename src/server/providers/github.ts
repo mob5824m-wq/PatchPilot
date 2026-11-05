@@ -1,6 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { repoRoot, USER_AGENT } from '../config.ts';
+import githubApps from '../../../config/github-apps.json' with { type: 'json' };
+import { PROJECT_URL, buildUserAgent } from '../../shared/userAgent.ts';
 import { fetchJson, HttpError } from '../http.ts';
 import { pageMentionsVersion } from './scrape.ts';
 import { emptyResult, type CandidateFile, type Provider, type ProviderResult, type ResolveContext } from './types.ts';
@@ -35,19 +34,19 @@ interface Release {
 }
 
 const headers = (): Record<string, string> => {
-  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  // `process` does not exist in the WebView build; there is no token there either.
+  const env = typeof process === 'undefined' ? undefined : process.env;
+  const token = env?.GITHUB_TOKEN ?? env?.GH_TOKEN;
   return token ? { authorization: `Bearer ${token}` } : {};
 };
 
+/**
+ * The mapping is imported rather than read at runtime so the same code runs in
+ * the Node server and in the Android app, where there is no repository folder to
+ * read from. Edit config/github-apps.json and rebuild to add an app.
+ */
 export async function loadGithubMappings(): Promise<Record<string, GithubMapping>> {
-  const path = join(repoRoot, 'config', 'github-apps.json');
-  try {
-    const text = await readFile(path, 'utf8');
-    const parsed = JSON.parse(text) as { apps?: Record<string, GithubMapping> };
-    return parsed.apps ?? {};
-  } catch {
-    return {};
-  }
+  return (githubApps as { apps?: Record<string, GithubMapping> }).apps ?? {};
 }
 
 const APK_ASSET = /\.(apk|apkm|apks|xapk)$/i;
@@ -72,7 +71,7 @@ export class GithubReleasesProvider implements Provider {
 
     const releases = await fetchJson<Release[]>(
       `https://api.github.com/repos/${mapping.repo}/releases?per_page=30`,
-      { headers: { ...headers(), accept: 'application/vnd.github+json', 'user-agent': USER_AGENT }, timeoutMs: 20_000 },
+      { headers: { ...headers(), accept: 'application/vnd.github+json', 'user-agent': buildUserAgent('app') }, timeoutMs: 20_000 },
     ).catch((error: unknown) => {
       if (error instanceof HttpError && error.status === 404) return [] as Release[];
       throw error;

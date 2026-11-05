@@ -38,6 +38,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The APK ships the web UI, which Vite builds into dist/web.
+      - run: npm ci
+      - name: Build the web bundle
+        run: npm run build
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

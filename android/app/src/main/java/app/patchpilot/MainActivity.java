@@ -2,94 +2,72 @@ package app.patchpilot;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
-import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.text.InputType;
-import android.view.Gravity;
 import android.view.KeyEvent;
-import android.view.View;
 import android.view.ViewGroup;
-import android.view.inputmethod.EditorInfo;
-import android.webkit.CookieManager;
-import android.webkit.DownloadListener;
-import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 /**
- * PatchPilot for Android is a thin client: the real work (finding the APK a
- * Morphe bundle wants, downloading and verifying it) happens in the PatchPilot
- * server on your computer, and this app gives you that UI on the phone so the
- * verified file can be saved straight into Downloads where Morphe Manager can
- * pick it up.
+ * PatchPilot on Android, with no server anywhere.
  *
- * Deliberately free of AndroidX and of any generated layout: one activity, the
- * framework WebView, and the system DownloadManager. Fewer moving parts means
- * fewer ways for the release build to break.
+ * The React UI in `src/web` is bundled into the APK and served from a synthetic
+ * origin (`https://patchpilot.local/`) that this activity answers from assets.
+ * The UI calls `/api/...` exactly as it does against the Node server; inside the
+ * app those calls are intercepted by `src/app/install.ts` and answered in the
+ * page. Everything Android alone can do — sockets, files, PackageManager — is
+ * exposed to that page as one JavaScript interface, {@link NativeShell}.
  */
 public class MainActivity extends Activity {
 
-    private static final String PREFS = "patchpilot";
-    private static final String KEY_SERVER = "server";
+    /** The origin the bundled UI is served from. Not a real host. */
+    static final String ORIGIN_HOST = "patchpilot.local";
+    private static final String ORIGIN = "https://" + ORIGIN_HOST;
+
     private static final int REQUEST_FILE_CHOOSER = 1001;
-    private static final int REQUEST_STORAGE = 1002;
 
-    private SharedPreferences preferences;
     private WebView webView;
-    private TextView addressLabel;
-    private TextView statusBar;
-
-    /** Non-null while a JS file picker is waiting for its result. */
+    private NativeShell shell;
     private ValueCallback<Uri[]> filePathCallback;
-
-    /** A download that is queued behind the storage permission prompt. */
-    private String pendingDownloadUrl;
-    private String pendingDownloadUserAgent;
-    private String pendingDownloadContentDisposition;
-    private String pendingDownloadMimeType;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.WHITE);
-        configureWebView(webView);
+        configure(webView);
 
-        setContentView(buildLayout());
+        shell = new NativeShell(this, webView);
+        webView.addJavascriptInterface(shell, "PatchPilotNative");
 
-        String saved = preferences.getString(KEY_SERVER, null);
-        if (saved == null) {
-            webView.loadData(emptyState(), "text/html", "utf-8");
-            askForServer(true);
-        } else {
-            loadServer(saved);
+        setContentView(webView, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        webView.loadUrl(ORIGIN + "/index.html");
+
+        // Before Android 10 the library writes to the public Downloads folder,
+        // which needs the legacy storage permission.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, 1002);
         }
     }
 
-    /* ------------------------------------------------------------- web view --- */
-
-    private void configureWebView(WebView view) {
+    private void configure(WebView view) {
         WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -98,52 +76,31 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setBuiltInZoomControls(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
-        }
-
-        CookieManager.getInstance().setAcceptCookie(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(true);
 
         view.setWebViewClient(new WebViewClient() {
             @Override
-            public boolean shouldOverrideUrlLoading(WebView webView, WebResourceRequest request) {
-                return openUrl(webView, request.getUrl());
+            public WebResourceResponse shouldInterceptRequest(WebView ignored, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if (uri == null || !ORIGIN_HOST.equals(uri.getHost())) return null;
+                return serveAsset(uri.getPath());
             }
 
             @Override
-            @SuppressWarnings("deprecation")
-            public boolean shouldOverrideUrlLoading(WebView webView, String url) {
-                return openUrl(webView, Uri.parse(url));
-            }
-
-            @Override
-            public void onPageFinished(WebView webView, String url) {
-                statusBar.setVisibility(View.GONE);
-            }
-
-            @Override
-            @SuppressWarnings("deprecation")
-            public void onReceivedError(WebView webView, int errorCode, String description, String failingUrl) {
-                showOffline();
-            }
-
-            @Override
-            public void onReceivedError(WebView webView, WebResourceRequest request, android.webkit.WebResourceError error) {
-                if (request.isForMainFrame()) showOffline();
+            public boolean shouldOverrideUrlLoading(WebView ignored, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if (uri == null) return false;
+                if (ORIGIN_HOST.equals(uri.getHost())) return false;
+                openExternally(uri);
+                return true;
             }
         });
 
         view.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onShowFileChooser(
-                    WebView webView,
-                    ValueCallback<Uri[]> callback,
-                    FileChooserParams params) {
-                // "Verify a file" and bundle upload are plain <input type="file">,
-                // so the picker has to work for those screens to be usable.
+            public boolean onShowFileChooser(WebView ignored, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                // "Verify a file" and bundle upload are plain <input type="file">.
                 if (filePathCallback != null) filePathCallback.onReceiveValue(null);
                 filePathCallback = callback;
                 try {
@@ -155,109 +112,63 @@ public class MainActivity extends Activity {
                 }
             }
         });
-
-        view.setDownloadListener(new DownloadListener() {
-            @Override
-            public void onDownloadStart(
-                    String url,
-                    String userAgent,
-                    String contentDisposition,
-                    String mimeType,
-                    long contentLength) {
-                enqueueDownload(url, userAgent, contentDisposition, mimeType);
-            }
-        });
     }
 
-    /** Keeps the PatchPilot server inside the WebView and sends everything else out. */
-    private boolean openUrl(WebView view, Uri uri) {
-        String scheme = uri.getScheme();
-        if (scheme == null) return false;
-        if (!scheme.equals("http") && !scheme.equals("https")) {
-            openExternally(uri);
-            return true;
+    /**
+     * Serves `assets/web/*`. Called on a background thread, so it opens its own
+     * streams and never touches the UI.
+     */
+    private WebResourceResponse serveAsset(String path) {
+        String cleaned = path == null ? "" : path.replaceFirst("^/+", "");
+        if (cleaned.isEmpty()) cleaned = "index.html";
+
+        InputStream stream = openAsset(cleaned);
+        if (stream == null) {
+            // Single-page app: unknown paths are routes, not files.
+            stream = openAsset("index.html");
+            cleaned = "index.html";
         }
-        String server = preferences.getString(KEY_SERVER, null);
-        if (server != null && sameHost(server, uri)) return false;
-        openExternally(uri);
-        return true;
+        if (stream == null) return null;
+
+        WebResourceResponse response = new WebResourceResponse(mimeType(cleaned), "utf-8", stream);
+        if (!cleaned.equals("index.html")) {
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            headers.put("cache-control", "public, max-age=31536000, immutable");
+            response.setResponseHeaders(headers);
+        }
+        return response;
     }
 
-    private static boolean sameHost(String server, Uri uri) {
+    private InputStream openAsset(String name) {
         try {
-            Uri base = Uri.parse(server);
-            return base.getHost() != null && base.getHost().equalsIgnoreCase(uri.getHost());
-        } catch (RuntimeException error) {
-            return false;
+            return getAssets().open("web/" + name);
+        } catch (IOException error) {
+            return null;
         }
+    }
+
+    private static String mimeType(String name) {
+        String lower = name.toLowerCase();
+        if (lower.endsWith(".html")) return "text/html";
+        if (lower.endsWith(".js") || lower.endsWith(".mjs")) return "text/javascript";
+        if (lower.endsWith(".css")) return "text/css";
+        if (lower.endsWith(".json")) return "application/json";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".ico")) return "image/x-icon";
+        if (lower.endsWith(".woff2")) return "font/woff2";
+        if (lower.endsWith(".txt")) return "text/plain";
+        return "application/octet-stream";
     }
 
     private void openExternally(Uri uri) {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
-            Toast.makeText(this, R.string.open_external, Toast.LENGTH_SHORT).show();
         } catch (ActivityNotFoundException error) {
-            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "No app can open that link", Toast.LENGTH_SHORT).show();
         }
-    }
-
-    /* -------------------------------------------------------------- downloads --- */
-
-    private void enqueueDownload(String url, String userAgent, String contentDisposition, String mimeType) {
-        if (url == null || url.isEmpty()) {
-            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            pendingDownloadUrl = url;
-            pendingDownloadUserAgent = userAgent;
-            pendingDownloadContentDisposition = contentDisposition;
-            pendingDownloadMimeType = mimeType;
-            requestPermissions(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, REQUEST_STORAGE);
-            return;
-        }
-        startDownload(url, userAgent, contentDisposition, mimeType);
-    }
-
-    private void startDownload(String url, String userAgent, String contentDisposition, String mimeType) {
-        try {
-            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-            String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
-            request.setTitle(fileName);
-            request.setMimeType(mimeType != null ? mimeType : "application/vnd.android.package-archive");
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            // Downloads/PatchPilot keeps the library separate from the rest of the
-            // phone's downloads, so "Select an APK" in Morphe Manager has one
-            // obvious folder to look in.
-            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "PatchPilot/" + fileName);
-
-            String cookies = CookieManager.getInstance().getCookie(url);
-            if (cookies != null && !cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);
-            if (userAgent != null && !userAgent.isEmpty()) request.addRequestHeader("User-Agent", userAgent);
-
-            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-            if (manager == null) throw new IllegalStateException("no DownloadManager");
-            manager.enqueue(request);
-            Toast.makeText(this, getString(R.string.download_started, fileName), Toast.LENGTH_LONG).show();
-        } catch (RuntimeException error) {
-            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_LONG).show();
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != REQUEST_STORAGE) return;
-        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingDownloadUrl != null) {
-            startDownload(pendingDownloadUrl, pendingDownloadUserAgent, pendingDownloadContentDisposition, pendingDownloadMimeType);
-        } else {
-            Toast.makeText(this, R.string.permission_needed, Toast.LENGTH_LONG).show();
-        }
-        pendingDownloadUrl = null;
-        pendingDownloadUserAgent = null;
-        pendingDownloadContentDisposition = null;
-        pendingDownloadMimeType = null;
     }
 
     @Override
@@ -275,120 +186,6 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
-    /* ------------------------------------------------------------------- ui --- */
-
-    private View buildLayout() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setBackgroundColor(Color.parseColor("#111827"));
-        int padding = Math.round(12 * getResources().getDisplayMetrics().density);
-        bar.setPadding(padding, padding, padding, padding);
-
-        addressLabel = new TextView(this);
-        addressLabel.setTextColor(Color.parseColor("#e5e7eb"));
-        addressLabel.setTextSize(13);
-        addressLabel.setSingleLine(true);
-        addressLabel.setPadding(0, 0, padding, 0);
-        addressLabel.setOnClickListener(v -> askForServer(false));
-        addressLabel.setText(getString(R.string.server_title));
-        bar.addView(addressLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        Button reload = new Button(this);
-        reload.setText(R.string.reload);
-        reload.setAllCaps(false);
-        reload.setOnClickListener(v -> {
-            String server = preferences.getString(KEY_SERVER, null);
-            if (server == null) askForServer(true);
-            else loadServer(server);
-        });
-        bar.addView(reload);
-
-        root.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        statusBar = new TextView(this);
-        statusBar.setBackgroundColor(Color.parseColor("#7f1d1d"));
-        statusBar.setTextColor(Color.WHITE);
-        statusBar.setTextSize(13);
-        statusBar.setPadding(padding, padding, padding, padding);
-        statusBar.setVisibility(View.GONE);
-        root.addView(statusBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        root.addView(webView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        return root;
-    }
-
-    private void showOffline() {
-        String server = preferences.getString(KEY_SERVER, "");
-        statusBar.setText(getString(R.string.offline, server));
-        statusBar.setVisibility(View.VISIBLE);
-    }
-
-    private String emptyState() {
-        return "<!doctype html><html><body style=\"margin:0;font:16px -apple-system,system-ui,sans-serif;"
-                + "background:#f8fafc;color:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh\">"
-                + "<div style=\"max-width:26em;padding:24px;text-align:center\">"
-                + "<h1 style=\"font-size:22px;margin:0 0 8px\">PatchPilot</h1>"
-                + "<p style=\"color:#475569;line-height:1.5\">Tap the address bar above to connect to the "
-                + "PatchPilot server running on your computer.</p></div></body></html>";
-    }
-
-    /**
-     * The server address is the only setting this app has, so it is asked for
-     * once and then lives in the top bar, ready to be tapped again when the
-     * machine moves to a different address.
-     */
-    private void askForServer(boolean firstRun) {
-        final EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
-        input.setSingleLine(true);
-        input.setHint(R.string.server_hint);
-        String current = preferences.getString(KEY_SERVER, "");
-        input.setText(current);
-        input.setSelection(input.getText().length());
-        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-                .setTitle(R.string.server_title)
-                .setMessage(R.string.server_message)
-                .setView(input)
-                .setPositiveButton(R.string.server_save, (dialog, which) -> {
-                    String normalized = normalize(input.getText().toString());
-                    if (normalized == null) {
-                        Toast.makeText(this, R.string.server_invalid, Toast.LENGTH_LONG).show();
-                        askForServer(firstRun);
-                        return;
-                    }
-                    preferences.edit().putString(KEY_SERVER, normalized).apply();
-                    loadServer(normalized);
-                });
-
-        if (!firstRun) builder.setNegativeButton(R.string.server_cancel, null);
-        builder.setCancelable(!firstRun).show();
-    }
-
-    /** Accepts "192.168.1.20:3000", "http://box.local:3000/" or a full URL. */
-    private static String normalize(String raw) {
-        if (raw == null) return null;
-        String value = raw.trim();
-        if (value.isEmpty()) return null;
-        if (!value.startsWith("http://") && !value.startsWith("https://")) value = "http://" + value;
-        while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
-        Uri uri = Uri.parse(value);
-        if (uri.getHost() == null || uri.getHost().isEmpty()) return null;
-        return value;
-    }
-
-    private void loadServer(String server) {
-        addressLabel.setText(server);
-        addressLabel.setTextColor(Color.parseColor("#e5e7eb"));
-        statusBar.setVisibility(View.GONE);
-        webView.loadUrl(server + "/");
-    }
-
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK && webView != null && webView.canGoBack()) {
@@ -400,7 +197,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (shell != null) shell.shutdown();
         if (webView != null) {
+            webView.removeJavascriptInterface("PatchPilotNative");
             webView.setWebChromeClient(null);
             webView.destroy();
             webView = null;
