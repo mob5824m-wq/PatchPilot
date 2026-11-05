@@ -6,6 +6,7 @@ import pikoList from '../../fixtures/bundles/piko.patches-list.json';
 import pikoMeta from '../../fixtures/bundles/piko.patches-bundle.json';
 import { setFetchImplementation, setUserAgent } from '../server/http.ts';
 import { buildUserAgent } from '../shared/userAgent.ts';
+import { abiPreference } from './abi.ts';
 import { LocalBundles, type SeedBundle } from './bundles.ts';
 import { LocalJobs } from './jobs.ts';
 import { LocalLibrary } from './library.ts';
@@ -149,6 +150,9 @@ export async function installStandalone(): Promise<boolean> {
   await library.init();
 
   const settings = await loadAppSettings(native);
+  // Split bundles and ABI-pinned version codes only make sense with the phone's
+  // own architecture. A preference the user set by hand always wins.
+  if (!settings.preferAbi) settings.preferAbi = abiPreference(device.abis);
   const jobs: LocalJobs = new LocalJobs(native, library, () => backend.currentSettings(), () => undefined);
 
   const backend: LocalBackend = new LocalBackend({
@@ -170,6 +174,9 @@ export async function installStandalone(): Promise<boolean> {
   // Refresh the bundles once the first screen is up, so the phone starts from
   // the bundled snapshot and improves from there.
   window.setTimeout(() => bundles.refreshInBackground(), 1_500);
+
+  const minutes = Math.max(5, settings.autoRefreshMinutes || 180);
+  window.setInterval(() => bundles.refreshInBackground(), minutes * 60_000);
   return true;
 }
 

@@ -30,6 +30,7 @@ Requires Node 20.19+ (developed on Node 22). No database, no accounts, no extern
 npm run dev      # server + Vite in one process (single port)
 npm start        # build the web UI, then serve it
 npm test         # parsers, mirrors, catalog, verification, job flow, releases, UI render
+npm run check:java     # parse the Android sources without a Gradle build
 npm run version:next   # what the next release would be called, from the commit log
 npm run cli -- list
 ```
@@ -165,8 +166,8 @@ PatchPilot reports its own version at `/api/health`, in the UI footer, and via `
 
 `android/` contains PatchPilot for Android — a **standalone** app. It reads the patch bundles, finds the exact build on
 APKPure or APKMirror, downloads it, verifies it on the device and puts it in `Downloads/PatchPilot/`, right where
-Morphe Manager's *Select an APK* picker expects it. No computer, no server, no network setup. Every release attaches an
-installable APK.
+Morphe Manager's *Select an APK* picker expects it — and offers the installer, so the APK never has to leave the phone.
+No computer, no server, no network setup. Every release attaches an installable APK.
 
 Nothing was reimplemented for the phone. The React UI is the same build, and the catalog, the mirror scrapers, the job
 runner and the verification rules are the same TypeScript, running inside the Android WebView:

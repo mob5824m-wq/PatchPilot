@@ -51,6 +51,8 @@ export interface NativeDevice {
   version: string;
   sdk: number;
   model: string;
+  /** `Build.SUPPORTED_ABIS`, most preferred first. */
+  abis?: string[];
 }
 
 export interface NativeBridge {
@@ -161,6 +163,11 @@ export class Native {
 
   async toast(message: string): Promise<void> {
     await this.bridge.call('ui.toast', { message });
+  }
+
+  /** Hands a saved APK to the system installer. */
+  async installApk(handle: string, name: string): Promise<void> {
+    await this.bridge.call('apk.install', { handle, name });
   }
 }
 

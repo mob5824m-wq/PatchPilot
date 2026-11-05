@@ -405,6 +405,12 @@ export class LocalBackend {
       return this.json(detail);
     }
 
+    if (parts.length === 4 && parts[1] === 'library' && parts[3] === 'install' && method(route) === 'POST') {
+      const installed = await this.options.library.install(decodeURIComponent(parts[2] ?? ''));
+      if (!installed) throw new ApiError('Unknown library entry', 404);
+      return this.json({ installed });
+    }
+
     if (parts.length === 4 && parts[1] === 'library' && parts[3] === 'file') {
       return this.json(
         {

@@ -67,6 +67,9 @@ public class NativeShell {
             device.put("version", BuildConfig.VERSION_NAME);
             device.put("sdk", Build.VERSION.SDK_INT);
             device.put("model", Build.MANUFACTURER + " " + Build.MODEL);
+            JSONArray abis = new JSONArray();
+            for (String abi : Build.SUPPORTED_ABIS) abis.put(abi);
+            device.put("abis", abis);
         } catch (JSONException ignored) {
             // The keys are fixed strings; this cannot happen.
         }
@@ -86,6 +89,10 @@ public class NativeShell {
 
             case "apk.inspectBytes":
                 return inspector.inspectBytes(payload.getString("name"), payload.getString("base64"));
+
+            case "apk.install":
+                install(payload.getString("handle"));
+                return true;
 
             case "library.publish":
                 return library.publish(payload.getString("path"), payload.getString("name"));
@@ -129,6 +136,27 @@ public class NativeShell {
     private void toast(final String message) {
         if (message == null || message.isEmpty()) return;
         activity.runOnUiThread(() -> Toast.makeText(activity, message, Toast.LENGTH_SHORT).show());
+    }
+
+    /**
+     * Hands a verified APK to the system installer. The file is already in the
+     * public Downloads folder, so the installer can read it and the user can
+     * confirm the install without leaving the app.
+     */
+    private void install(String handle) throws Exception {
+        if (handle == null || handle.isEmpty()) throw new IllegalArgumentException("No file to install");
+        android.net.Uri uri = handle.startsWith("content://")
+                ? android.net.Uri.parse(handle)
+                : android.net.Uri.fromFile(new java.io.File(handle));
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "application/vnd.android.package-archive");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            activity.startActivity(intent);
+        } catch (android.content.ActivityNotFoundException error) {
+            throw new IllegalStateException(
+                    "No installer available. Open Downloads/PatchPilot and tap the file instead.");
+        }
     }
 
     private void openUrl(String url) {

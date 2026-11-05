@@ -31,6 +31,8 @@ jobs:
         run: npm test
       - name: Build the web bundle
         run: npm run build
+      - name: Parse the Android sources
+        run: npm run check:java
 
   android:
     name: Android app

@@ -40,6 +40,15 @@ Key pieces:
 | `src/web/*` | Shared UI, untouched |
 | `android/app/src/main/java/app/patchpilot/` | `MainActivity` (WebView + assets), `NativeShell` (JS bridge), `HttpBridge`, `ApkInspector`, `LibraryStore` |
 
+## On-device details that matter
+
+- **Install** — the Library tab hands a verified file to the system installer, so the APK goes from the mirror to
+  installed without leaving the app. Android still asks for confirmation.
+- **ABI** — the phone tells the backend `Build.SUPPORTED_ABIS`, which becomes `preferAbi` unless you set one yourself.
+  Bundles pin a version code per ABI and mirrors serve a variant per ABI, so an arm64 phone asks for arm64.
+- **Auto-refresh** — patch bundles refresh in their own time (once at startup, then every `autoRefreshMinutes`), so the
+  catalog does not go stale while the app is open.
+
 ## Verification, on the phone
 
 The desktop build decodes the binary manifest and the APK Signing Block itself. Android already does both properly, so
@@ -90,6 +99,7 @@ but cannot update an installation signed with a different key** — fine for try
 | Permission | Why |
 | --- | --- |
 | `INTERNET` | APKPure, APKMirror, GitHub, F-Droid |
+| `REQUEST_INSTALL_PACKAGES` | Offering the installer for a verified APK |
 | `WRITE_EXTERNAL_STORAGE` (`maxSdkVersion=28`) | Writing into the public `Downloads` folder on Android 9 and older; Android 10+ uses MediaStore instead |
 
 No cleartext traffic: all requests go through `HttpBridge`, and the WebView only ever loads the app's own assets from
@@ -102,3 +112,5 @@ No cleartext traffic: all requests go through `HttpBridge`, and the WebView only
 - **No GitHub token**: authenticated GitHub requests are a desktop feature; the app uses the anonymous rate limit.
 - The app cannot be built or run in a CI container without an Android SDK; `test/standalone.test.ts` exercises the
   standalone backend against a fake shell so the logic is covered regardless.
+- `npm run check:java` parses every Java file with a real Java parser, so syntax errors fail in a second instead of
+  after a Gradle build. It is a parser, not a compiler: types and API levels are still Gradle's job.

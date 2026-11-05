@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import type { AppInfo, LibraryEntry, VerificationResult } from '../../shared/types.ts';
+import { isStandalone } from '../../shared/platform.ts';
 import { api, libraryFileUrl } from '../api.ts';
 import { bytes, relativeTime } from '../format.ts';
 import { Badge, Card, Spinner, StatusDot, useToast } from './ui.tsx';
@@ -30,6 +31,7 @@ export function LibraryView({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const libraryTotal = entries.reduce((total, entry) => total + entry.sizeBytes, 0);
+  const standalone = isStandalone();
 
   async function copyLink(entry: LibraryEntry): Promise<void> {
     const url = `${window.location.origin}/api/library/${encodeURIComponent(entry.id)}/file`;
@@ -83,6 +85,18 @@ export function LibraryView({
     }
   }
 
+  async function install(entry: LibraryEntry): Promise<void> {
+    setBusyId(entry.id);
+    try {
+      await api.installLibraryEntry(entry.id);
+      toast.push(`Opening the installer for ${entry.fileName}`, 'good');
+    } catch (cause) {
+      toast.push((cause as Error).message, 'bad');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(entry: LibraryEntry): Promise<void> {
     setBusyId(entry.id);
     try {
@@ -103,8 +117,10 @@ export function LibraryView({
           <h1>Library</h1>
           <p className="fine-print">
             Verified APKs land here, ready for Morphe's file picker. {entries.length} file
-            {entries.length === 1 ? '' : 's'} · {bytes(libraryTotal)} on disk. Copy a link and open it on your phone
-            (same Wi-Fi) to pull the file straight into it.
+            {entries.length === 1 ? '' : 's'} · {bytes(libraryTotal)} on disk.{' '}
+            {standalone
+              ? 'Files are in Downloads/PatchPilot on this device — install one, or point Morphe at that folder.'
+              : 'Copy a link and open it on your phone (same Wi-Fi) to pull the file straight into it.'}
           </p>
         </div>
         <button type="button" className="ghost-button" onClick={onGoToApps}>
@@ -177,12 +193,26 @@ export function LibraryView({
                     </td>
                     <td className="library-size">{bytes(entry.sizeBytes)}</td>
                     <td className="library-actions">
-                      <a className="ghost-button" href={libraryFileUrl(entry.id)} download>
-                        Save
-                      </a>
-                      <button type="button" className="ghost-button" onClick={() => void copyLink(entry)}>
-                        Link
-                      </button>
+                      {standalone ? (
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={busyId === entry.id}
+                          title="Hand this file to the system installer"
+                          onClick={() => void install(entry)}
+                        >
+                          Install
+                        </button>
+                      ) : (
+                        <>
+                          <a className="ghost-button" href={libraryFileUrl(entry.id)} download>
+                            Save
+                          </a>
+                          <button type="button" className="ghost-button" onClick={() => void copyLink(entry)}>
+                            Link
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         className="ghost-button danger"

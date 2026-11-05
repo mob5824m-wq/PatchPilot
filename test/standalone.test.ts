@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
+import { abiPreference } from '../src/app/abi.ts';
 import { LocalBundles, type SeedBundle } from '../src/app/bundles.ts';
 import { LocalJobs } from '../src/app/jobs.ts';
 import { LocalLibrary } from '../src/app/library.ts';
@@ -54,6 +55,7 @@ interface Shell {
   library: Map<string, NativeLibraryFile>;
   requests: string[];
   downloaded: string[];
+  installed: string[];
   close: () => Promise<void>;
 }
 
@@ -145,6 +147,7 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
   const temp = new Map<string, Uint8Array>();
   const requests: string[] = [];
   const downloaded: string[] = [];
+  const installed: string[] = [];
   let counter = 0;
 
   const rewrite = (url: string): string => {
@@ -232,6 +235,10 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
         case 'store.set':
           store.set(String(input.key), String(input.value));
           return true;
+        case 'apk.install':
+          installed.push(String(input.handle));
+          return true;
+
         case 'ui.toast':
         case 'open.url':
           return true;
@@ -247,6 +254,7 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
     library,
     requests,
     downloaded,
+    installed,
     close: async () => undefined,
   };
 }
@@ -440,6 +448,42 @@ test('a file the user picks can be verified on the phone and kept', async () => 
   assert.equal(harness.shell.library.size, 0);
 
   await harness.close();
+});
+
+test('a saved APK can be handed to the system installer', async () => {
+  const harness = await startHarness();
+  const bytes = new Uint8Array(4096).fill(4);
+
+  await harness.backend.handle(
+    'POST',
+    '/api/verify',
+    new URLSearchParams({ name: 'youtube.apk', packageName: PACKAGE, version: VERSION, keep: '1' }),
+    bytes,
+  );
+  const library = (await harness.backend.handle('GET', '/api/library', new URLSearchParams(), null)).body as {
+    entries: { id: string }[];
+  };
+  assert.equal(library.entries.length, 1);
+
+  const result = await harness.backend.handle(
+    'POST',
+    `/api/library/${library.entries[0]!.id}/install`,
+    new URLSearchParams(),
+    null,
+  );
+  assert.equal((result.body as { installed: boolean }).installed, true);
+  assert.deepEqual(harness.shell.installed, ['lib:com.google.android.youtube_21.43.523.apk']);
+
+  await harness.close();
+});
+
+test('the phone asks the mirrors for its own ABI', () => {
+  assert.equal(abiPreference(['arm64-v8a', 'armeabi-v7a', 'armeabi']), 'arm64-v8a');
+  assert.equal(abiPreference(['armeabi-v7a', 'armeabi']), 'armeabi-v7a');
+  assert.equal(abiPreference(['x86_64', 'x86']), 'x86_64');
+  assert.equal(abiPreference(['riscv64']), 'riscv64');
+  assert.equal(abiPreference([]), null);
+  assert.equal(abiPreference(undefined), null);
 });
 
 test('bundles refresh from GitHub and fall back to the snapshot when the network is gone', async () => {

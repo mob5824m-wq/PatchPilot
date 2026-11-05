@@ -135,6 +135,11 @@ export const api = {
       parse<{ removed: boolean }>(response),
     ),
 
+  installLibraryEntry: (id: string) =>
+    fetch(`/api/library/${encodeURIComponent(id)}/install`, { method: 'POST' }).then((response) =>
+      parse<{ installed: boolean }>(response),
+    ),
+
   inspectLibraryEntry: (id: string) =>
     fetch(`/api/library/${encodeURIComponent(id)}/inspect`).then((response) =>
       parse<{ file: ApkFileInfo; entry: LibraryEntry }>(response),

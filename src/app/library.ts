@@ -177,6 +177,14 @@ export class LocalLibrary {
     return true;
   }
 
+  /** Opens a saved file in the system installer. */
+  async install(id: string): Promise<boolean> {
+    const entry = this.entries.get(id);
+    if (!entry) return false;
+    await this.native.installApk(entry.handle, entry.fileName);
+    return true;
+  }
+
   async describe(id: string): Promise<{ file: ApkFileInfo; entry: LibraryEntry } | null> {
     const entry = this.entries.get(id);
     if (!entry) return null;
