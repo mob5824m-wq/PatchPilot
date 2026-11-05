@@ -61,7 +61,22 @@ jobs:
 
       - name: Assemble the debug APK
         working-directory: android
-        run: gradle assembleDebug --no-daemon --stacktrace -PpatchPilotVersion=0.0.0-ci
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --stacktrace -PpatchPilotVersion=0.0.0-ci 2>&1 | tee gradle.log
+
+      # The build log itself is not reachable from every environment, but the job
+      # summary is, so the failing part is copied where it can be read.
+      - name: Publish the Gradle failure to the job summary
+        if: failure()
+        working-directory: android
+        run: |
+          {
+            echo '### Gradle failure'
+            echo '```'
+            grep -n -i -B 2 -A 12 'what went wrong\|FAILURE:\|error:' gradle.log | head -200 || tail -80 gradle.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

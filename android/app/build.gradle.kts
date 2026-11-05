@@ -18,7 +18,8 @@ fun versionCodeFor(name: String): Int {
     val major = parts.getOrElse(0) { 0 }
     val minor = parts.getOrElse(1) { 0 }
     val patch = parts.getOrElse(2) { 0 }
-    return major * 10_000 + minor * 100 + patch
+    // Android refuses versionCode 0, so a 0.0.0 build still gets a legal code.
+    return maxOf(1, major * 10_000 + minor * 100 + patch)
 }
 
 /**
@@ -45,6 +46,11 @@ tasks.named("preBuild") { dependsOn(copyWebAssets) }
 android {
     namespace = "app.patchpilot"
     compileSdk = 35
+
+    buildFeatures {
+        // BuildConfig carries the version and the debug flag into Java.
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "app.patchpilot"
