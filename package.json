@@ -1,0 +1,42 @@
+{
+  "name": "patchpilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Finds the exact APK version a Morphe patch bundle needs, downloads it, and verifies it before you patch.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "tsx src/server/index.ts --dev",
+    "start": "npm run build && tsx src/server/index.ts",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts test/*.test.tsx",
+    "cli": "tsx src/server/cli.ts",
+    "fixtures": "tsx src/server/apk/fixture.ts",
+    "version:next": "tsx scripts/next-version.ts",
+    "release:notes": "tsx scripts/next-version.ts --notes-out release-notes.md",
+    "android": "cd android && gradle assembleDebug",
+    "check:java": "node scripts/check-java.mjs",
+    "changelog": "tsx scripts/changelog.ts",
+    "changelog:check": "tsx scripts/changelog.ts --check"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "java-parser": "^3.0.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.5"
+  }
+}

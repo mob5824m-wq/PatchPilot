@@ -1,0 +1,19 @@
+{
+  "data": {
+    "packageName": "com.google.android.youtube",
+    "versionList": [
+      {
+        "versionName": "21.43.523",
+        "versionCode": 1834500,
+        "downloadUrl": "/cdn/apkpure-1834500.apk",
+        "whatsNew": "Bug fixes"
+      },
+      {
+        "versionName": "21.30.216",
+        "versionCode": 1830216,
+        "downloadUrl": "/cdn/apkpure-1830216.apk",
+        "whatsNew": "Bug fixes"
+      }
+    ]
+  }
+}

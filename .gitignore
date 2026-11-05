@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+.env
+.env.local
+*.log
+.DS_Store
+
+# release tooling artifacts (generated in CI)
+release-notes.md
+version.json
+dist-release/

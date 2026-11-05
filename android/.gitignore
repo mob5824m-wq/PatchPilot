@@ -1,0 +1,9 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+
+# copied in from ../../dist/web at build time
+app/src/main/assets/web/
