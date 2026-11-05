@@ -96,6 +96,9 @@ PatchPilot offers patches, and therefore apps, **only from the bundles your Morp
 on: a bundle that is not in your Morphe would suggest apps your patches cannot touch, so the catalog starts empty and
 fills from what you tell it.
 
+- **Reading Morphe Manager** *(Android)*: every launch, PatchPilot asks Android what it can see of Morphe — its install,
+  a `.mpp` or `patches-list.json` it left in a shared folder, and on a rooted device its own preferences file, which
+  names the repositories it has. Anything found is loaded before you tap anything.
 - **Bundles tab → Import from Morphe**: paste the sources from Morphe's patch-source screen, one per line
   (`owner/repo` or a full GitHub URL). Known bundles are switched on, new ones are fetched, and anything it cannot use
   (`https://…/patches.mpp`, a bare file name) is reported rather than half-imported.
@@ -104,6 +107,11 @@ fills from what you tell it.
 
 The Catalog API reports the arithmetic (`morphe: { loaded, available }`) so the UI can tell "nothing loaded yet" apart
 from "nothing matches".
+
+**What "reading Morphe" can and cannot do.** Android does not let one app read another's private files, and Morphe keeps
+its source list there. So the read is best-effort by design: the install is always detected, shared-folder bundles are
+picked up whenever the OS allows it, and a rooted device gets the preferences file outright. When the answer is "nothing
+readable", the app says that in the Bundles tab and the Doctor — it never falls back to guessing which bundles you use.
 
 ## Doctor
 

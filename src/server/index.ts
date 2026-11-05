@@ -226,6 +226,23 @@ app.post('/api/bundles/:id/refresh', async (request, response) => {
   }
 });
 
+// Morphe lives on the phone; a desktop has no app store listing to read.
+app.get('/api/morphe', (_request, response) => {
+  json(response, {
+    supported: false,
+    discovery: null,
+    notes: ['Reading Morphe Manager is only possible in the Android app.'],
+  });
+});
+
+app.post('/api/morphe/scan', (_request, response) => {
+  json(response, {
+    supported: false,
+    discovery: null,
+    notes: ['Reading Morphe Manager is only possible in the Android app — on the server, import your sources by hand.'],
+  });
+});
+
 app.post('/api/bundles/import', async (request, response) => {
   const { sources } = request.body as { sources?: string };
   const outcome = await importBundleSources(String(sources ?? ''), {

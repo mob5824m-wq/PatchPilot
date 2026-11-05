@@ -1,8 +1,22 @@
-import { useRef, useState, type ReactNode } from 'react';
-import type { BundleInfo } from '../../shared/types.ts';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { BundleInfo, MorpheDiscovery } from '../../shared/types.ts';
+import { isStandalone } from '../../shared/platform.ts';
 import { api } from '../api.ts';
 import { relativeTime } from '../format.ts';
 import { Badge, Card, Spinner, Toggle, useToast } from './ui.tsx';
+
+function summarise(discovery: MorpheDiscovery): string {
+  const names = discovery.installed.map((entry) => `${entry.package}${entry.version ? ` ${entry.version}` : ''}`);
+  if (!discovery.installed.length) return 'Morphe Manager is not installed on this device.';
+  if (discovery.added.length || discovery.enabled.length) {
+    const parts: string[] = [];
+    if (discovery.added.length) parts.push(`added ${discovery.added.join(', ')}`);
+    if (discovery.enabled.length) parts.push(`switched on ${discovery.enabled.join(', ')}`);
+    return `${parts.join(' · ')} — from ${discovery.filesRead} file(s) in ${names.join(', ')}.`;
+  }
+  if (discovery.filesRead > 0) return `Read ${discovery.filesRead} file(s) from ${names.join(', ')}, but none named a patch source.`;
+  return `${names.join(', ')} is installed, but nothing of it is readable from another app.`;
+}
 
 function originBadge(bundle: BundleInfo): ReactNode {
   if (bundle.origin === 'network') return <Badge tone="good">live</Badge>;
@@ -20,6 +34,9 @@ export function BundlesView({
   onChanged: (bundles: BundleInfo[]) => void;
 }): ReactNode {
   const toast = useToast();
+  const standalone = isStandalone();
+  const [morphe, setMorphe] = useState<MorpheDiscovery | null>(null);
+  const [morpeNotes, setMorpheNotes] = useState<string[]>([]);
   const [sourcesText, setSourcesText] = useState('');
   const [repo, setRepo] = useState('');
   const [name, setName] = useState('');
@@ -36,6 +53,33 @@ export function BundlesView({
       toast.push('Bundle added.', 'good');
       setRepo('');
       setName('');
+    } catch (cause) {
+      toast.push((cause as Error).message, 'bad');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!standalone) return;
+    void api
+      .morphe()
+      .then((result) => {
+        setMorphe(result.discovery);
+        setMorpheNotes(result.notes);
+      })
+      .catch(() => undefined);
+  }, [standalone]);
+
+  async function readMorphe(): Promise<void> {
+    setBusy('morphe');
+    try {
+      const result = await api.scanMorphe();
+      setMorphe(result.discovery);
+      setMorpheNotes(result.notes);
+      const next = await api.bundles();
+      onChanged(next.bundles);
+      toast.push(result.notes[0] ?? (result.discovery?.found ? 'Read Morphe.' : 'Nothing readable in Morphe.'), result.discovery?.found ? 'good' : 'info');
     } catch (cause) {
       toast.push((cause as Error).message, 'bad');
     } finally {
@@ -230,6 +274,40 @@ export function BundlesView({
           </Card>
         ))}
       </div>
+
+      {standalone ? (
+        <Card>
+          <div className="card-head">
+            <h2>Read from Morphe</h2>
+            <button type="button" className="ghost-button" onClick={() => void readMorphe()} disabled={busy !== null}>
+              {busy === 'morphe' ? <Spinner size={12} /> : '↻'} Scan this device
+            </button>
+          </div>
+          <p className="fine-print">
+            PatchPilot looks for what Morphe Manager left where other apps can read it — a downloaded{' '}
+            <code>.mpp</code>, a <code>patches-list.json</code>, or its source list. Android keeps an app's private
+            files private, so on most phones this can confirm Morphe is installed but not see inside it; the manual
+            import below is the way in when that happens. It runs once by itself on every launch.
+          </p>
+          {morphe ? (
+            <div className="morphe-report">
+              <div className="morphe-line">
+                <Badge tone={morphe.found ? 'good' : 'warn'}>
+                  {morphe.found ? 'read' : 'blocked'}
+                </Badge>
+                <span>{summarise(morphe)}</span>
+              </div>
+              {morpeNotes.map((note) => (
+                <div key={note} className="doctor-hint">
+                  {note}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="fine-print">Not read yet.</div>
+          )}
+        </Card>
+      ) : null}
 
       <div className="bundle-add-grid">
         <Card>

@@ -1664,3 +1664,19 @@ p {
   resize: vertical;
   margin-bottom: 8px;
 }
+
+/* Read from Morphe ------------------------------------------------------ */
+
+.morphe-report {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.morphe-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}

@@ -168,6 +168,14 @@ export async function installStandalone(): Promise<boolean> {
   });
 
   installFetchShim(backend);
+
+  // On a fresh install nothing is loaded, and the answer is on this device:
+  // ask Android what of Morphe it can see before the user ever sees an empty
+  // catalogue. It costs one scan per launch and stays silent when the answer is
+  // "Android keeps that private".
+  window.setTimeout(() => {
+    void backend.handle('POST', '/api/morphe/scan', new URLSearchParams(), null).catch(() => undefined);
+  }, 300);
   installEventSourceShim(backend);
   installDownloadLinkGuard(native);
 

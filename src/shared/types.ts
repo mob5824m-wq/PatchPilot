@@ -100,6 +100,28 @@ export interface CatalogResponse {
   morphe: { loaded: number; available: number };
 }
 
+/**
+ * What the last read of Morphe Manager found. Kept in settings so the Bundles tab
+ * and the Doctor can report it without scanning again.
+ */
+export interface MorpheDiscovery {
+  scannedAt: string;
+  installed: { package: string; version: string | null }[];
+  filesRead: number;
+  sources: string[];
+  enabled: string[];
+  added: string[];
+  notes: string[];
+  found: boolean;
+}
+
+/** Answer of `POST /api/morphe/scan`: whether the platform allows it, and what came back. */
+export interface MorpheScanResponse {
+  supported: boolean;
+  discovery: MorpheDiscovery | null;
+  notes: string[];
+}
+
 export interface BundleImportResult {
   bundles: BundleInfo[];
   enabled: string[];
@@ -247,6 +269,8 @@ export interface Settings {
   preferAbi: string | null;
   autoRefreshMinutes: number;
   demoSource: boolean;
+  /** Only the phone can read Morphe, so this is absent in server mode. */
+  morpheScan?: MorpheDiscovery | null;
 }
 
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip';

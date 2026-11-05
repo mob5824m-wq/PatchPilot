@@ -34,6 +34,7 @@ public class NativeShell {
     private final ApkInspector inspector;
     private final LibraryStore library;
     private final KeyValueStore store;
+    private final MorpheScanner morphe;
 
     public NativeShell(Activity activity, WebView webView) {
         this.activity = activity;
@@ -42,6 +43,7 @@ public class NativeShell {
         this.inspector = new ApkInspector(activity);
         this.library = new LibraryStore(activity);
         this.store = new KeyValueStore(activity);
+        this.morphe = new MorpheScanner(activity);
     }
 
     @JavascriptInterface
@@ -106,6 +108,12 @@ public class NativeShell {
 
             case "app.openMorphe":
                 return openMorphe();
+
+            case "morphe.scan":
+                return morphe.scan();
+
+            case "morphe.read":
+                return morphe.read(payload.getString("path"));
 
             case "device.state":
                 return deviceState();

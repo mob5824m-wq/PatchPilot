@@ -272,6 +272,27 @@ export class LocalBundles {
     return this.info(config);
   }
 
+  /**
+   * A bare `patches-list.json` — what a bundle is when it is not zipped. Morphe
+   * accepts one, and so should a file picked off the device.
+   */
+  async addPatchList(name: string, patchesList: unknown, bundleInfo: unknown = null): Promise<BundleInfo> {
+    const label = name.replace(/\.(json|mpp)$/i, '');
+    const id = `list-${slug(label) || 'bundle'}`;
+    const existing = this.configs.find((config) => config.id === id);
+    const config: BundleConfig = existing ?? {
+      id,
+      name: label,
+      kind: 'upload',
+      enabled: true,
+      builtin: false,
+    };
+    if (!existing) this.configs.push(config);
+    this.cache.set(id, { patchesList, bundleInfo, fetchedAt: new Date().toISOString(), origin: 'upload' });
+    await this.persist();
+    return this.info(config);
+  }
+
   /** The raw list, for logic that has to reason about what is and is not loaded. */
   getConfigs(): BundleConfig[] {
     return [...this.configs];

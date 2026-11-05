@@ -61,6 +61,32 @@ export interface NativeBridge {
   call(action: string, payload: unknown, onEvent?: (event: Record<string, unknown>) => void): Promise<unknown>;
 }
 
+/** One file a Morphe scan could see, with why it was listed. */
+export interface MorpheFile {
+  path: string;
+  name: string;
+  sizeBytes: number;
+  kind: string;
+  modifiedAt?: number;
+}
+
+/** What `morphe.scan` found on the device, including what it could not read. */
+export interface MorpheScan {
+  installed: { package: string; version: string | null }[];
+  files: MorpheFile[];
+  unreadable: { path: string; reason: string }[];
+  notes: string[];
+  rooted: boolean;
+  sdk: number;
+}
+
+export interface MorpheFileContents {
+  path: string;
+  name: string;
+  sizeBytes: number;
+  base64: string;
+}
+
 export interface DeviceState {
   freeBytes: number;
   totalBytes: number;
@@ -177,6 +203,16 @@ export class Native {
   /** Storage, install permission and notification state, for the Doctor. */
   async state(): Promise<DeviceState> {
     return this.bridge.call('device.state', {}) as Promise<DeviceState>;
+  }
+
+  /** Asks the shell what of Morphe Manager it can see on this device. */
+  async scanMorphe(): Promise<MorpheScan> {
+    return this.bridge.call('morphe.scan', {}) as Promise<MorpheScan>;
+  }
+
+  /** Bytes for a file a scan reported; the shell refuses any other path. */
+  async readMorpheFile(path: string): Promise<MorpheFileContents> {
+    return this.bridge.call('morphe.read', { path }) as Promise<MorpheFileContents>;
   }
 
   /** Opens Morphe Manager, if a known package for it is installed. */

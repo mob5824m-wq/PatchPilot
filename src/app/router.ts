@@ -4,13 +4,15 @@ import type {
   CatalogResponse,
   DoctorCheck,
   DownloadJob,
+  MorpheScanResponse,
   HealthResponse,
   ResolveCandidate,
   Settings,
 } from '../shared/types.ts';
 import { verifyApk, type ExpectedApp } from '../shared/verifyMeta.ts';
-import { bundleChecks, libraryChecks, providerChecks, report, settingsChecks } from '../shared/doctor.ts';
+import { bundleChecks, libraryChecks, morpheCheck, providerChecks, report, settingsChecks } from '../shared/doctor.ts';
 import { importBundleSources } from '../shared/bundleImport.ts';
+import { discoverMorphe, summariseDiscovery } from './morpheScan.ts';
 import { buildAppDetail, buildCatalog } from '../server/catalog.ts';
 import { request } from '../server/http.ts';
 import type { Provider } from '../server/providers/types.ts';
@@ -270,6 +272,38 @@ export class LocalBackend {
       return this.json(info, 201);
     }
 
+    if (route === 'GET /api/morphe') {
+      return this.json({ supported: true, discovery: this.settings.morpheScan ?? null, notes: [] });
+    }
+
+    if (route === 'POST /api/morphe/scan') {
+      const discovery = await discoverMorphe(
+        {
+          scan: () => this.options.native.scanMorphe(),
+          read: (path) => this.options.native.readMorpheFile(path),
+        },
+        {
+          configs: () => this.options.bundles.getConfigs(),
+          enable: async (id) => {
+            await this.options.bundles.setEnabled(id, true);
+          },
+          addRepo: async (repo) => {
+            await this.options.bundles.addRepo(repo);
+          },
+          addArchive: async (name, bytes) => (await this.options.bundles.addUpload(name, bytes)).name,
+          addPatchList: async (name, list) => (await this.options.bundles.addPatchList(name, list)).name,
+        },
+      );
+      this.invalidate();
+      this.settings = { ...this.settings, morpheScan: discovery };
+      await this.options.saveSettings(this.settings);
+      return this.json({
+        supported: true,
+        discovery,
+        notes: [summariseDiscovery(discovery)],
+      } satisfies MorpheScanResponse);
+    }
+
     if (route === 'POST /api/bundles/import') {
       // The page posts JSON text, so it is decoded the same way as every other route.
       const { sources } = textOf(body);
@@ -399,6 +433,7 @@ export class LocalBackend {
           install,
           notifications,
           ...bundleChecks(this.options.bundles.infos()),
+          morpheCheck(this.settings.morpheScan),
           ...libraryChecks(await this.options.library.list()),
           ...settingsChecks(this.settings, activeAppProviders(this.settings).length),
           ...(await providerChecks(providers)),

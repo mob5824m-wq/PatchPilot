@@ -236,6 +236,35 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
         case 'store.set':
           store.set(String(input.key), String(input.value));
           return true;
+        case 'morphe.scan':
+          return {
+            installed: [{ package: 'app.morphe.manager', version: '1.24.1' }],
+            files: [
+              {
+                path: '/sdcard/Android/media/app.morphe.manager/files/sources.xml',
+                name: 'sources.xml',
+                sizeBytes: 64,
+                kind: 'preferences',
+              },
+            ],
+            unreadable: [
+              { path: '/data/data/app.morphe.manager', reason: 'Android does not allow other apps to read this folder' },
+            ],
+            notes: ['Read 1 file(s) Morphe left where other apps can reach them.'],
+            rooted: false,
+            sdk: 34,
+          };
+
+        case 'morphe.read':
+          return {
+            path: String(input.path),
+            name: 'sources.xml',
+            sizeBytes: 64,
+            base64: toBase64(
+              new TextEncoder().encode('<string name="sources">https://github.com/MorpheApp/morphe-patches</string>'),
+            ),
+          };
+
         case 'app.openMorphe':
           return { package: 'app.morphe.manager' };
 
@@ -583,6 +612,52 @@ test('demo fixtures can be pruned and Morphe can be opened', async () => {
   };
   assert.equal(morphe.opened, true);
   assert.equal(morphe.package, 'app.morphe.manager');
+
+  await harness.close();
+});
+
+test('reading Morphe fills the catalogue without anyone pasting a url', async () => {
+  const harness = await startHarness({}, { loadSources: false });
+
+  const empty = (await harness.backend.handle('GET', '/api/catalog', new URLSearchParams(), null)).body as {
+    appCount: number;
+  };
+  assert.equal(empty.appCount, 0);
+
+  const scan = (await harness.backend.handle('POST', '/api/morphe/scan', new URLSearchParams(), null)).body as {
+    supported: boolean;
+    notes: string[];
+    discovery: { found: boolean; filesRead: number; enabled: string[]; installed: { package: string }[] };
+  };
+
+  assert.equal(scan.supported, true);
+  assert.equal(scan.discovery.found, true);
+  assert.equal(scan.discovery.filesRead, 1);
+  assert.deepEqual(scan.discovery.enabled, ['Morphe Patches']);
+  assert.deepEqual(
+    scan.discovery.installed.map((entry) => entry.package),
+    ['app.morphe.manager'],
+  );
+
+  // The catalogue follows, and the result is remembered for the UI and the Doctor.
+  const catalog = (await harness.backend.handle('GET', '/api/catalog', new URLSearchParams(), null)).body as {
+    appCount: number;
+    morphe: { loaded: number };
+  };
+  assert.ok(catalog.appCount > 0);
+  assert.equal(catalog.morphe.loaded, 1);
+
+  const cached = (await harness.backend.handle('GET', '/api/morphe', new URLSearchParams(), null)).body as {
+    discovery: { found: boolean } | null;
+  };
+  assert.equal(cached.discovery?.found, true);
+
+  const doctor = (await harness.backend.handle('GET', '/api/doctor', new URLSearchParams(), null)).body as {
+    checks: { id: string; status: string; detail: string }[];
+  };
+  const morpheCheck = doctor.checks.find((check) => check.id === 'morphe');
+  assert.ok(morpheCheck, 'the Doctor should report on Morphe');
+  assert.equal(morpheCheck.status, 'pass');
 
   await harness.close();
 });
