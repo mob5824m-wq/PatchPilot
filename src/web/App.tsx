@@ -159,7 +159,7 @@ function Shell(): ReactNode {
         </nav>
 
         <div className="topbar-meta">
-          <Badge tone="accent" title="Patches available across enabled bundles">
+          <Badge tone="accent" title="Patches across the bundles your Morphe has loaded">
             {bundleSummary.patches} patches
           </Badge>
           <button type="button" className="ghost-button" onClick={() => void loadCatalog(true)} disabled={refreshing}>
@@ -199,10 +199,21 @@ function Shell(): ReactNode {
                     <>
                       <Spinner size={20} /> Loading patch bundles…
                     </>
+                  ) : catalog?.morphe.loaded === 0 ? (
+                    <>
+                      <h2>Nothing loaded from Morphe yet</h2>
+                      <p>
+                        PatchPilot only offers the patches your Morphe has, so tell it which bundles those are. Paste
+                        your Morphe sources, or flip on the ones you use — nothing is guessed.
+                      </p>
+                      <button type="button" className="primary-button" onClick={() => setTab('bundles')}>
+                        Set up Morphe bundles
+                      </button>
+                    </>
                   ) : (
                     <>
                       <h2>No apps to show</h2>
-                      <p>Enable a patch bundle in the Bundles tab, or add one by repository name.</p>
+                      <p>Your loaded bundles name no patchable apps yet. Try refreshing them in the Bundles tab.</p>
                     </>
                   )}
                 </div>

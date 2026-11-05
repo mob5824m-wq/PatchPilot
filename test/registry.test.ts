@@ -12,7 +12,7 @@ const { BundleRegistry } = await import('../src/server/bundles/registry.ts');
 const { buildCatalog } = await import('../src/server/catalog.ts');
 const { ensureDirs } = await import('../src/server/config.ts');
 
-test('offline mode serves the bundled snapshots', async () => {
+test('offline mode serves the bundled snapshots, but only once a bundle is loaded', async () => {
   ensureDirs();
   const registry = new BundleRegistry();
   await registry.init();
@@ -23,6 +23,22 @@ test('offline mode serves the bundled snapshots', async () => {
   assert.ok(official);
   assert.equal(official?.origin, 'seed');
   assert.ok((official?.patchCount ?? 0) > 100);
+
+  // Shipping a bundle means it can be loaded, not that it is: the catalog is
+  // the intersection with the user's Morphe.
+  assert.equal(registry.getPayloads().length, 0);
+  assert.equal(buildCatalog(registry.getPayloads()).appCount, 0);
+
+  await registry.setEnabled('morphe-official', true);
+  assert.deepEqual(
+    registry.getPayloads().map((payload) => payload.info.id),
+    ['morphe-official'],
+  );
+
+  // The whole fixture catalog needs all three, exactly as it would on a phone
+  // where those are the bundles Morphe has.
+  await registry.setEnabled('hxreborn', true);
+  await registry.setEnabled('piko', true);
 
   const catalog = buildCatalog(registry.getPayloads());
   assert.ok(catalog.appCount > 100, `expected a large catalog, got ${catalog.appCount}`);

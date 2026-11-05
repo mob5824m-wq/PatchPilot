@@ -93,6 +93,18 @@ export interface CatalogResponse {
   appCount: number;
   patchCount: number;
   packageCount: number;
+  /**
+   * How much of the catalog comes from bundles the user says their Morphe has.
+   * `loaded` of `available` — `loaded: 0` means the app has nothing to offer yet.
+   */
+  morphe: { loaded: number; available: number };
+}
+
+export interface BundleImportResult {
+  bundles: BundleInfo[];
+  enabled: string[];
+  added: string[];
+  skipped: { source: string; reason: string }[];
 }
 
 export interface ProviderInfo {

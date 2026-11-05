@@ -1,5 +1,6 @@
 import type {
   AppDetail,
+  BundleImportResult,
   DoctorReport,
   BundleInfo,
   CatalogResponse,
@@ -48,6 +49,13 @@ export const api = {
 
   bundles: () =>
     fetch('/api/bundles').then((response) => parse<{ bundles: BundleInfo[] }>(response)),
+
+  importBundles: (sources: string) =>
+    fetch('/api/bundles/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sources }),
+    }).then((response) => parse<BundleImportResult>(response)),
 
   addBundle: (repo: string, name?: string) =>
     fetch('/api/bundles', {

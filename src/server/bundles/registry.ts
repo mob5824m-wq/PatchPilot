@@ -6,6 +6,7 @@ import { ZipReader } from '../apk/zip.ts';
 import type { BundlePayload } from '../catalog.ts';
 import {
   bundleCacheDir,
+  cloneDefaultBundles,
   defaultBundles,
   fixtureDir,
   loadBundleConfigs,
@@ -470,7 +471,7 @@ export class BundleRegistry {
   }
 
   async resetToDefaults(): Promise<void> {
-    this.configs = [...defaultBundles];
+    this.configs = cloneDefaultBundles();
     await saveBundleConfigs(this.configs);
     await Promise.all(this.configs.map((config) => this.load(config)));
   }

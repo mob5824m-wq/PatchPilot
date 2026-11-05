@@ -1,4 +1,4 @@
-import { defaultBundles } from '../shared/defaults.ts';
+import { cloneDefaultBundles } from '../shared/defaults.ts';
 import type { BundleConfig, BundleInfo } from '../shared/types.ts';
 import type { BundlePayload } from '../server/catalog.ts';
 import { parseBundleInfo, parsePatchList } from '../server/bundles/parse.ts';
@@ -101,7 +101,7 @@ export class LocalBundles {
 
   async init(): Promise<void> {
     const stored = await this.readState();
-    this.configs = stored?.configs?.length ? stored.configs : [...defaultBundles];
+    this.configs = stored?.configs?.length ? stored.configs : cloneDefaultBundles();
     for (const [id, entry] of Object.entries(stored?.cache ?? {})) this.cache.set(id, entry);
 
     // Seed anything the store does not know about yet, so the first screen has
@@ -272,6 +272,11 @@ export class LocalBundles {
     return this.info(config);
   }
 
+  /** The raw list, for logic that has to reason about what is and is not loaded. */
+  getConfigs(): BundleConfig[] {
+    return [...this.configs];
+  }
+
   async setEnabled(id: string, enabled: boolean): Promise<BundleInfo[]> {
     const config = this.configs.find((entry) => entry.id === id);
     if (!config) throw new Error('Unknown bundle');
@@ -291,7 +296,7 @@ export class LocalBundles {
   }
 
   async reset(): Promise<BundleInfo[]> {
-    this.configs = [...defaultBundles];
+    this.configs = cloneDefaultBundles();
     this.cache.clear();
     for (const config of this.configs) {
       const seed = this.seeds.find((entry) => entry.id === config.id);

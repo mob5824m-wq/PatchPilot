@@ -213,6 +213,9 @@ export function buildCatalog(payloads: BundlePayload[]): CatalogResponse {
     appCount: appInfos.length,
     patchCount,
     packageCount: appInfos.length,
+    // Every payload is loaded by definition; callers with a full bundle list
+    // override `available` with how many bundles exist.
+    morphe: { loaded: payloads.length, available: payloads.length },
   };
 }
 

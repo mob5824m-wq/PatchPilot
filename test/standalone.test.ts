@@ -22,6 +22,7 @@ import {
 import { makeProxyFetch } from '../src/app/proxyFetch.ts';
 import { defaultAppSettings, LocalBackend } from '../src/app/router.ts';
 import { setFetchImplementation } from '../src/server/http.ts';
+import { importBundleSources } from '../src/shared/bundleImport.ts';
 import type { Settings } from '../src/shared/types.ts';
 
 /**
@@ -292,7 +293,27 @@ interface Harness {
   close: () => Promise<void>;
 }
 
-async function startHarness(options: ShellOptions = {}): Promise<Harness> {
+const MORPHE_SOURCES = ['MorpheApp/morphe-patches', 'hxreborn/morphe-patches', 'crimera/piko'].join('\n');
+
+/**
+ * What the user does once: point PatchPilot at the bundles their Morphe has.
+ * Nothing ships switched on, so every harness that expects a catalog does this.
+ */
+async function loadMorpheSources(bundles: LocalBundles, sources = MORPHE_SOURCES): Promise<void> {
+  const outcome = await importBundleSources(sources, {
+    configs: () => bundles.getConfigs(),
+    enable: async (id) => {
+      await bundles.setEnabled(id, true);
+    },
+    add: async (repo) => {
+      await bundles.addRepo(repo);
+    },
+  });
+  assert.deepEqual(outcome.added, []);
+  assert.deepEqual(outcome.skipped, []);
+}
+
+async function startHarness(options: ShellOptions = {}, harnessOptions: { loadSources?: boolean } = {}): Promise<Harness> {
   const network = await startNetwork();
   const shell = createShell(network.base, options);
 
@@ -303,6 +324,7 @@ async function startHarness(options: ShellOptions = {}): Promise<Harness> {
 
   const bundles = new LocalBundles(shell.native, await loadSeeds());
   await bundles.init();
+  if (harnessOptions.loadSources !== false) await loadMorpheSources(bundles);
   const library = new LocalLibrary(shell.native);
   await library.init();
 
@@ -329,24 +351,8 @@ async function startHarness(options: ShellOptions = {}): Promise<Harness> {
 }
 
 test('the standalone catalog comes from the bundled patch snapshots', async () => {
-  const network = await startNetwork();
-  const shell = createShell(network.base);
-  const bundles = new LocalBundles(shell.native, await loadSeeds());
-  await bundles.init();
-
-  const library = new LocalLibrary(shell.native);
-  await library.init();
-  const settings = defaultAppSettings();
-  const jobs: LocalJobs = new LocalJobs(shell.native, library, () => backend.currentSettings(), () => undefined);
-  const backend: LocalBackend = new LocalBackend({
-    native: shell.native,
-    bundles,
-    library,
-    getJobs: (): LocalJobs => jobs,
-    settings,
-    version: '1.2.3',
-    saveSettings: async () => undefined,
-  });
+  const harness = await startHarness();
+  const backend = harness.backend;
 
   const health = await backend.handle('GET', '/api/health', new URLSearchParams(), null);
   assert.equal(health.status, 200);
@@ -360,7 +366,57 @@ test('the standalone catalog comes from the bundled patch snapshots', async () =
   const info = await backend.handle('GET', `/api/apps/${PACKAGE}`, new URLSearchParams(), null);
   assert.equal(info.status, 200);
 
-  await network.close();
+  await harness.close();
+});
+
+test('nothing is offered until the user says which bundles Morphe has', async () => {
+  const harness = await startHarness({}, { loadSources: false });
+
+  const empty = (await harness.backend.handle('GET', '/api/catalog', new URLSearchParams(), null)).body as {
+    appCount: number;
+    morphe: { loaded: number; available: number };
+  };
+  assert.equal(empty.appCount, 0);
+  assert.deepEqual(empty.morphe, { loaded: 0, available: 3 });
+
+  // Importing one known source is all it takes.
+  const imported = (
+    await harness.backend.handle(
+      'POST',
+      '/api/bundles/import',
+      new URLSearchParams(),
+      JSON.stringify({ sources: 'https://github.com/MorpheApp/morphe-patches' }),
+    )
+  ).body as { enabled: string[]; added: string[]; bundles: { id: string; enabled: boolean }[] };
+
+  assert.deepEqual(imported.added, []);
+  assert.deepEqual(imported.enabled, ['Morphe Patches']);
+  assert.equal(imported.bundles.filter((bundle) => bundle.enabled).length, 1);
+
+  const catalog = (await harness.backend.handle('GET', '/api/catalog', new URLSearchParams(), null)).body as {
+    appCount: number;
+    patchCount: number;
+    morphe: { loaded: number; available: number };
+  };
+  assert.equal(catalog.morphe.loaded, 1);
+  assert.equal(catalog.morphe.available, 3);
+  assert.ok(catalog.appCount > 0);
+
+  // A line it cannot use is reported, and changes nothing.
+  const junk = (
+    await harness.backend.handle(
+      'POST',
+      '/api/bundles/import',
+      new URLSearchParams(),
+      JSON.stringify({ sources: 'not a real bundle\nhttps://example.com/patches.mpp' }),
+    )
+  ).body as { enabled: string[]; added: string[]; skipped: { source: string }[] };
+
+  assert.deepEqual(junk.added, []);
+  assert.deepEqual(junk.enabled, []);
+  assert.equal(junk.skipped.length, 2);
+
+  await harness.close();
 });
 
 test('a standalone download runs through the mirrors and lands in the library', async () => {
