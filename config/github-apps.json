@@ -1,0 +1,17 @@
+{
+  "$comment": [
+    "Packages whose APKs are published in GitHub releases, so PatchPilot can fetch them directly.",
+    "Keys are Android package names, values are the repository plus an optional asset name filter.",
+    "Add your own entries here; the GitHub source reads this file on every job."
+  ],
+  "apps": {
+    "org.schabi.newpipe": { "repo": "TeamNewPipe/NewPipe" },
+    "com.github.libretube": { "repo": "LibreTube/LibreTube" },
+    "com.github.terrakok.gitfox": { "repo": "terrakok/Gitfox" },
+    "com.keylesspalace.tusky": { "repo": "tuskyapp/Tusky" },
+    "com.termux": { "repo": "termux/termux-app", "assetPattern": "universal" },
+    "com.aurora.store": { "repo": "auroraoss/AuroraStore" },
+    "com.dergoogler.mmrl": { "repo": "DerGoogler/MMRL" },
+    "me.zhanghai.android.files": { "repo": "zhanghai/MaterialFiles" }
+  }
+}
