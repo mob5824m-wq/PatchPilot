@@ -5,3 +5,8 @@ data/
 .env.local
 *.log
 .DS_Store
+
+# release tooling artifacts (generated in CI)
+release-notes.md
+version.json
+dist-release/
