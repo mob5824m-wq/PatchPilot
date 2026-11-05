@@ -1,5 +1,8 @@
 # PatchPilot
 
+[![CI](https://github.com/mob5824m-wq/PatchPilot/actions/workflows/ci.yml/badge.svg)](https://github.com/mob5824m-wq/PatchPilot/actions/workflows/ci.yml)
+[![Release](https://github.com/mob5824m-wq/PatchPilot/actions/workflows/release.yml/badge.svg)](https://github.com/mob5824m-wq/PatchPilot/releases)
+
 **Get the exact APK a Morphe patch bundle asks for — downloaded, checked, and filed where Morphe can pick it up.**
 
 Morphe patches only apply to specific app versions. Guessing wrong costs you a 90 MB download and a failed patch run.
@@ -26,7 +29,8 @@ Requires Node 20.19+ (developed on Node 22). No database, no accounts, no extern
 ```bash
 npm run dev      # server + Vite in one process (single port)
 npm start        # build the web UI, then serve it
-npm test         # 32 tests: parsers, catalog, verification, job flow, UI render
+npm test         # parsers, mirrors, catalog, verification, job flow, releases, UI render
+npm run version:next   # what the next release would be called, from the commit log
 npm run cli -- list
 ```
 
@@ -114,6 +118,7 @@ to a snapshot of three bundles shipped in `fixtures/bundles` — so a fresh clon
 ## Command line
 
 ```bash
+npx tsx src/server/cli.ts --version
 npx tsx src/server/cli.ts list --stable
 npx tsx src/server/cli.ts versions com.google.android.youtube
 npx tsx src/server/cli.ts get com.google.android.youtube                 # recommended version
@@ -125,6 +130,46 @@ npx tsx src/server/cli.ts bundles
 `get` streams the same provider log the UI shows and exits non-zero when nothing verifies. Handy for scripting a patch
 pipeline around Morphe.
 
+## Releases
+
+Merging into `main` is the release. The version is not typed anywhere by hand:
+
+1. The **Release** workflow reads the commits since the last `v*` tag and picks the bump from the commit messages —
+   `feat:` is a minor release, `fix:`/`perf:`/an unconventional message is a patch, `feat!:` or a
+   `BREAKING CHANGE:` trailer is a major one. Chores, docs, tests and CI changes produce no release at all, so the
+   workflow simply exits.
+2. It stamps that version into `package.json`, runs the typecheck and the test suite, builds the web bundle and the
+   Android APK, and only then tags the merge commit.
+3. It publishes a GitHub release with:
+
+   | Asset | What it is |
+   | --- | --- |
+   | `patchpilot-<version>.tar.gz` | The whole server: `dist/`, `src/`, `config/`, `fixtures/`, `package*.json` |
+   | `patchpilot-android-<version>.apk` | The Android client, `versionName`/`versionCode` taken from the tag |
+   | `SHA256SUMS` | Checksums for both |
+
+No release commit is needed: the tag is the source of truth and `PATCHPILOT_VERSION` carries it into the build. The
+workflow does push a `chore(release): vX.Y.Z [skip ci]` commit afterwards so `package.json` stays in step, but the
+release stands even if branch protection rejects that push.
+
+Want a specific bump? Run the workflow by hand with `bump: minor`. Want to know what a merge would produce? Ask locally:
+
+```bash
+npm run version:next -- --bump auto            # JSON: version, tag, bump, release
+npm run version:next -- --notes-out notes.md   # and write the release notes
+```
+
+PatchPilot reports its own version at `/api/health`, in the UI footer, and via `cli --version`.
+
+## Android app
+
+`android/` contains PatchPilot for Android: a small, dependency-free WebView client that talks to the PatchPilot server
+running on your computer, so the verified APK can be saved straight into `Downloads/PatchPilot/` on the phone where
+Morphe Manager's *Select an APK* picker expects it. Every release attaches an installable APK.
+
+It is a client, not a self-contained downloader — the catalog, the mirrors and the signature checks stay on the server.
+See [android/README.md](android/README.md) for building it, the four signing secrets, and why it has no Gradle wrapper.
+
 ## Configuration
 
 Environment variables:
@@ -135,6 +180,8 @@ Environment variables:
 | `PATCHPILOT_DATA_DIR` | `./data` | Library, caches, job data |
 | `PATCHPILOT_OFFLINE` | unset | `1` = never touch the network (cache/snapshot only) |
 | `PATCHPILOT_DEMO` | unset | `1` = enable the offline fixture source |
+| `PATCHPILOT_VERSION` | `package.json` | Version reported by the server; set by the release workflow |
+| `PATCHPILOT_COMMIT` | unset | Short SHA reported by `/api/health` |
 | `GITHUB_TOKEN` / `GH_TOKEN` | unset | Optional; raises GitHub API rate limits when `raw.githubusercontent.com` is blocked |
 
 If your network uses a private CA (corporate proxy, hosted sandbox), Node's fetch may reject GitHub with
@@ -195,6 +242,8 @@ a separate project — this tool only prepares its input.
 src/server/          express API, bundle registry, catalog, providers, jobs, library, CLI
 src/web/             React UI (Vite), hand-written CSS
 src/shared/          types and labels shared by both
+scripts/             conventional-commit → version/notes logic used by the release workflow
+android/             the Android client (Java, framework only, no AndroidX)
 test/                node:test suites
 fixtures/bundles/    snapshot of three patch bundles (patch metadata only)
 fixtures/apk/        a real 5 KB sample APK (Android API demos) used by the parser tests

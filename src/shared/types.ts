@@ -238,6 +238,8 @@ export interface Settings {
 export interface HealthResponse {
   ok: boolean;
   version: string;
+  /** Short commit SHA when the server knows which build it is. */
+  commit?: string | null;
   demoSource: boolean;
   dataDir: string;
   libraryDir: string;

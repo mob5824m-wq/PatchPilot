@@ -13,6 +13,7 @@ import { describeApk, verifyApk, type ExpectedApp } from './apk/verify.ts';
 import { buildAppDetail, buildCatalog } from './catalog.ts';
 import {
   APP_VERSION,
+  BUILD_COMMIT,
   dataDir,
   demoSourceEnabled,
   ensureDirs,
@@ -72,6 +73,7 @@ app.get('/api/health', (_request, response) => {
   json(response, {
     ok: true,
     version: APP_VERSION,
+    commit: BUILD_COMMIT,
     demoSource: demoSourceEnabled,
     dataDir,
     libraryDir,

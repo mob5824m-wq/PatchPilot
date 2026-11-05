@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BundleConfig, Settings } from '../shared/types.ts';
@@ -7,7 +7,23 @@ import { readJson, writeJson } from './store.ts';
 const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = resolve(here, '..', '..');
 
-export const APP_VERSION = '0.1.0';
+/**
+ * The version comes from the release tag, not from a hand-edited constant.
+ * CI exports PATCHPILOT_VERSION from the tag it is publishing; a plain checkout
+ * falls back to package.json, which the release workflow keeps in step.
+ */
+function packageVersion(): string {
+  try {
+    const raw = readFileSync(join(repoRoot, 'package.json'), 'utf8');
+    return (JSON.parse(raw) as { version?: string }).version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+export const APP_VERSION = process.env.PATCHPILOT_VERSION?.trim() || packageVersion();
+/** Short commit SHA of the build, when CI knows it. */
+export const BUILD_COMMIT = process.env.PATCHPILOT_COMMIT?.trim() || null;
 
 export const dataDir = resolve(process.env.PATCHPILOT_DATA_DIR ?? join(repoRoot, 'data'));
 export const libraryDir = join(dataDir, 'library');

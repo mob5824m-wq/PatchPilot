@@ -5,7 +5,7 @@ import type { DownloadJob } from '../shared/types.ts';
 import { describeApk, verifyApk } from './apk/verify.ts';
 import { BundleRegistry } from './bundles/registry.ts';
 import { buildCatalog } from './catalog.ts';
-import { dataDir, demoSourceEnabled, ensureDirs, libraryDir, loadSettings, offlineMode } from './config.ts';
+import { APP_VERSION, dataDir, demoSourceEnabled, ensureDirs, libraryDir, loadSettings, offlineMode } from './config.ts';
 import { JobManager } from './jobs.ts';
 import { libraryFilePath } from './library.ts';
 import { fileTypeLabel } from '../shared/labels.ts';
@@ -59,6 +59,11 @@ function header(text: string): void {
 async function main(): Promise<void> {
   const { positional, flags } = parseFlags(process.argv.slice(2));
   const command = positional[0] ?? 'help';
+
+  if (flags.version === true || command === 'version' || command === '--version') {
+    console.log(`PatchPilot ${APP_VERSION}`);
+    return;
+  }
 
   ensureDirs();
   const registry = new BundleRegistry();
@@ -237,6 +242,7 @@ async function main(): Promise<void> {
       console.log(`PatchPilot — find the APK a Morphe patch bundle needs.
 
 Usage:
+  patchpilot --version
   patchpilot list [--stable]
   patchpilot versions <package>
   patchpilot get <package> [--version <v>] [--provider <id>] [--out <dir>]

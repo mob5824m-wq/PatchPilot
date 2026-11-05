@@ -1,0 +1,174 @@
+name: Release
+
+# Every merge to main (squashed or not) is a candidate release. The version is
+# derived from the conventional-commit messages in the push, so nobody edits a
+# version number by hand: `feat:` is a minor bump, `fix:` a patch, and a
+# `BREAKING CHANGE` trailer (or `type!:`) a major one. Pushes that only contain
+# chores, docs or CI changes produce no release at all.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which bump to apply (auto reads the commit messages)
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Version, build, publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with tags and history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Work out the next version
+        id: version
+        run: |
+          set -euo pipefail
+          last_tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          current="${last_tag#v}"
+          range="HEAD"
+          if [ -n "$last_tag" ]; then
+            range="$last_tag..HEAD"
+          fi
+          bump="${{ inputs.bump }}"
+          if [ -z "$bump" ]; then bump="auto"; fi
+          echo "range=$range current=$current bump=$bump"
+          npx tsx scripts/next-version.ts \
+            --current "$current" \
+            --range "$range" \
+            --bump "$bump" \
+            --notes-out release-notes.md > version.json
+          cat version.json
+          {
+            echo "version=$(jq -r .version version.json)"
+            echo "tag=$(jq -r .tag version.json)"
+            echo "bump=$(jq -r .bump version.json)"
+            echo "release=$(jq -r .release version.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Explain why nothing is being published
+        if: steps.version.outputs.release != 'true'
+        run: |
+          echo "::notice::No release-worthy commits since ${{ steps.version.outputs.tag || 'the last tag' }}."
+          echo "Only chores, docs, tests and CI changes were found, so the version stays where it is."
+
+      - name: Stamp the version into package.json
+        if: steps.version.outputs.release == 'true'
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Typecheck and test
+        if: steps.version.outputs.release == 'true'
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Build the web bundle
+        if: steps.version.outputs.release == 'true'
+        run: npm run build
+
+      - name: Package the server tarball
+        if: steps.version.outputs.release == 'true'
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          staging="dist-release/patchpilot-$version"
+          mkdir -p "$staging"
+          cp -r dist src config fixtures "$staging"/
+          cp package.json package-lock.json README.md LICENSE "$staging"/
+          tar -czf "patchpilot-$version.tar.gz" -C dist-release "patchpilot-$version"
+          ls -lh "patchpilot-$version.tar.gz"
+
+      - uses: actions/setup-java@v4
+        if: steps.version.outputs.release == 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.version.outputs.release == 'true'
+        with:
+          gradle-version: 8.11.1
+
+      - name: Build the Android APK
+        if: steps.version.outputs.release == 'true'
+        working-directory: android
+        env:
+          # Optional: set these four secrets to get a properly signed APK.
+          PATCHPILOT_KEYSTORE: ${{ secrets.PATCHPILOT_KEYSTORE_PATH }}
+          PATCHPILOT_KEYSTORE_PASSWORD: ${{ secrets.PATCHPILOT_KEYSTORE_PASSWORD }}
+          PATCHPILOT_KEY_ALIAS: ${{ secrets.PATCHPILOT_KEY_ALIAS }}
+          PATCHPILOT_KEY_PASSWORD: ${{ secrets.PATCHPILOT_KEY_PASSWORD }}
+        run: |
+          gradle assembleRelease --no-daemon --stacktrace \
+            -PpatchPilotVersion="${{ steps.version.outputs.version }}"
+          cp app/build/outputs/apk/release/app-release.apk \
+            "../patchpilot-android-${{ steps.version.outputs.version }}.apk"
+
+      - name: Checksums
+        if: steps.version.outputs.release == 'true'
+        run: |
+          sha256sum "patchpilot-${{ steps.version.outputs.version }}.tar.gz" \
+                    "patchpilot-android-${{ steps.version.outputs.version }}.apk" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Keep the APK as a workflow artifact too
+        if: steps.version.outputs.release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: patchpilot-android-${{ steps.version.outputs.version }}
+          path: patchpilot-android-${{ steps.version.outputs.version }}.apk
+          if-no-files-found: error
+
+      - name: Tag the release commit
+        if: steps.version.outputs.release == 'true'
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Publish the GitHub release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "PatchPilot ${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md \
+            "patchpilot-${{ steps.version.outputs.version }}.tar.gz" \
+            "patchpilot-android-${{ steps.version.outputs.version }}.apk" \
+            SHA256SUMS
+
+      - name: Keep package.json in step with the tag
+        if: steps.version.outputs.release == 'true'
+        # A version commit is convenience, not the source of truth (the tag is).
+        # If the branch is protected, the release still stands — hence the guard.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(release): ${{ steps.version.outputs.tag }} [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

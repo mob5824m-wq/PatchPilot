@@ -252,7 +252,9 @@ function Shell(): ReactNode {
           against the bundle's package, version and signing certificate.
         </span>
         <span className="footer-meta">
-          {health ? `v${health.version} · ${health.platform}` : null}
+          {health
+            ? `v${health.version}${health.commit ? ` (${health.commit.slice(0, 7)})` : ''} · ${health.platform}`
+            : null}
           {catalog ? ` · catalog ${relativeTime(catalog.generatedAt)}` : null}
         </span>
       </footer>
