@@ -15,6 +15,7 @@ import { AppList } from './components/AppList.tsx';
 import { AppView } from './components/AppView.tsx';
 import { BundlesView } from './components/BundlesView.tsx';
 import { DoctorView } from './components/DoctorView.tsx';
+import { LogoMark } from './components/Logo.tsx';
 import { JobPanel } from './components/JobPanel.tsx';
 import { LibraryView } from './components/LibraryView.tsx';
 import { SourcesView } from './components/SourcesView.tsx';
@@ -132,10 +133,7 @@ function Shell(): ReactNode {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <svg viewBox="0 0 32 32" className="brand-mark" aria-hidden>
-            <path d="M16 4.5l8.5 6v13L16 29.5 7.5 23.5v-13z" fill="none" stroke="currentColor" strokeWidth="2" />
-            <circle cx="16" cy="16" r="2.8" fill="currentColor" />
-          </svg>
+          <LogoMark size={30} />
           <div>
             <div className="brand-name">PatchPilot</div>
             <div className="brand-sub">the right APK, before Morphe asks for it</div>

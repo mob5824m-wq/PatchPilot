@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Dark, chrome-free, and the same colour as the badge. On Android 12+ the
+      system splash shows the launcher icon on this background, so launching
+      reads as one continuous surface rather than a white flash.
+    -->
+    <style name="Theme.PatchPilot" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:statusBarColor">@color/launch_background</item>
+        <item name="android:navigationBarColor">@color/launch_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/logo.svg" alt="PatchPilot" width="96" height="96" />
+</p>
+
 # PatchPilot
 
 [![CI](https://github.com/mob5824m-wq/PatchPilot/actions/workflows/ci.yml/badge.svg)](https://github.com/mob5824m-wq/PatchPilot/actions/workflows/ci.yml)
@@ -79,6 +83,12 @@ src/server/apk/signblock.ts  APK Signing Block v2/v3 → certificate digests
 src/server/apk/verify.ts     container detection, split bundle handling, the five checks
 src/server/apk/fixture.ts    builds genuine fixture APKs (manifest + v2 signature) for tests
 ```
+
+## The mark
+
+A hexagon seal with a compass needle pointing at the upper right — the bundle is the package, the needle is PatchPilot
+picking the one build your patches accept. Sources live in [`brand/`](brand/README.md); the same paths drive the web
+header, the favicon and the Android launcher icon (adaptive, with the Android 13 themed-icon silhouette).
 
 ## Only what your Morphe has
 

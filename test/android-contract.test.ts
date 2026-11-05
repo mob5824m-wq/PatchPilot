@@ -86,3 +86,86 @@ test('the APK ships the web UI, and both sides agree on the bridge name', () => 
   assert.match(nativeTs, /__patchpilotBridge/);
   assert.match(nativeShell, /__patchpilotBridge/);
 });
+
+test('the launcher icon is declared and every file it needs exists', () => {
+  const resDir = join(root, 'android', 'app', 'src', 'main', 'res');
+
+  assert.match(manifest, /android:icon="@mipmap\/ic_launcher"/);
+  assert.match(manifest, /android:roundIcon="@mipmap\/ic_launcher_round"/);
+
+  // Android 8+ takes the adaptive icon; the PNGs below it cover 7.x, which this
+  // app still supports (minSdk 24).
+  const adaptive = readFileSync(join(resDir, 'mipmap-anydpi-v26', 'ic_launcher.xml'), 'utf8');
+  assert.match(adaptive, /<background android:drawable="@drawable\/ic_launcher_background"/);
+  assert.match(adaptive, /<foreground android:drawable="@drawable\/ic_launcher_foreground"/);
+  assert.match(adaptive, /<monochrome android:drawable="@drawable\/ic_launcher_foreground"/);
+  assert.ok(existsSync(join(resDir, 'mipmap-anydpi-v26', 'ic_launcher_round.xml')));
+
+  const foreground = readFileSync(join(resDir, 'drawable', 'ic_launcher_foreground.xml'), 'utf8');
+  assert.match(foreground, /android:viewportWidth="108"/);
+  assert.ok(existsSync(join(resDir, 'drawable', 'ic_launcher_background.xml')));
+
+  for (const [density, size] of [
+    ['mdpi', 48],
+    ['hdpi', 72],
+    ['xhdpi', 96],
+    ['xxhdpi', 144],
+    ['xxxhdpi', 192],
+  ] as const) {
+    for (const name of ['ic_launcher.png', 'ic_launcher_round.png']) {
+      const file = join(resDir, `mipmap-${density}`, name);
+      assert.ok(existsSync(file), `${file} is missing`);
+      // PNG header carries the dimensions: width at bytes 16-19.
+      const header = readFileSync(file).subarray(16, 24);
+      assert.equal(header.readUInt32BE(0), size, `${file} is not ${size}px wide`);
+      assert.equal(header.readUInt32BE(4), size, `${file} is not ${size}px tall`);
+    }
+  }
+});
+
+test('the foreground stays inside the adaptive-icon safe zone', () => {
+  const resDir = join(root, 'android', 'app', 'src', 'main', 'res');
+  const foreground = readFileSync(join(resDir, 'drawable', 'ic_launcher_foreground.xml'), 'utf8');
+
+  // The hexagon ring is the outermost path; every point of it has to sit within
+  // 33dp of centre, or a round launcher mask shaves an edge off.
+  const ring = foreground.match(/android:pathData="(M[\d.,\s]+Z)"/)?.[1] ?? '';
+  assert.ok(ring.length > 0, 'the ring path is missing');
+
+  const points = [...ring.matchAll(/(\d+\.\d+),(\d+\.\d+)/g)].map((match) => [Number(match[1]), Number(match[2])]);
+  assert.ok(points.length >= 5, 'the ring should be a hexagon');
+  for (const [x, y] of points) {
+    const distance = Math.hypot(x! - 54, y! - 54);
+    assert.ok(distance <= 33, `ring point at ${x},${y} is ${distance.toFixed(1)}dp from centre`);
+  }
+});
+
+test('the seal in the page and the seal in brand/logo.svg are the same shape', () => {
+  const logo = readFileSync(join(root, 'brand', 'logo.svg'), 'utf8');
+  const component = readFileSync(join(root, 'src', 'web', 'components', 'Logo.tsx'), 'utf8');
+
+  const shapes = (source: string): string[] =>
+    [...source.matchAll(/\bd="(M[^"]+)"/g)].map((match) => match[1]!.replace(/\s+/g, ' ').trim());
+
+  const inFile = shapes(logo);
+  assert.ok(inFile.length >= 3, 'brand/logo.svg should carry the ring, the shaft and the head');
+  for (const shape of inFile) {
+    assert.ok(component.includes(shape), `Logo.tsx does not draw ${shape}`);
+  }
+  assert.match(component, /currentColor/, 'the page mark should take its colour from CSS');
+});
+
+test('the launch theme exists and matches the badge', () => {
+  const resDir = join(root, 'android', 'app', 'src', 'main', 'res');
+  const styles = readFileSync(join(resDir, 'values', 'styles.xml'), 'utf8');
+  const colours = readFileSync(join(resDir, 'values', 'colors.xml'), 'utf8');
+  const logo = readFileSync(join(root, 'brand', 'logo.svg'), 'utf8');
+
+  assert.match(manifest, /android:theme="@style\/Theme\.PatchPilot"/);
+  assert.match(styles, /<style name="Theme\.PatchPilot"/);
+  assert.match(styles, /android:windowBackground">@color\/launch_background/);
+
+  // One colour of record: the plate in the logo is the window background.
+  assert.match(colours, /<color name="launch_background">#080b10<\/color>/);
+  assert.match(logo, /#080d13/, 'brand/logo.svg should carry the same dark plate');
+});
