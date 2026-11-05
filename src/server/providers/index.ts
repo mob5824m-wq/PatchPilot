@@ -9,19 +9,23 @@ import { MorpheApiProvider } from './morpheApi.ts';
 import type { Provider } from './types.ts';
 
 /**
- * Provider order is the order PatchPilot tries them in: sources that can hand
- * back an exact file first, scraped mirrors after, and the human-facing Morphe
- * helper last. Users can reorder or disable any of them.
+ * Provider order is the order PatchPilot tries them in. APKPure and APKMirror
+ * are the only two sources that keep every historical release of every app, so
+ * they come first: an exact version of a Play Store app almost always exists
+ * there and nowhere else. APKPure leads because its version list can be read
+ * without scraping the HTML page. F-Droid and GitHub follow for open-source
+ * apps, and the human-facing Morphe helper is last. Users can reorder or
+ * disable any of them.
  */
 
-const DEFAULT_ORDER = ['fdroid', 'github', 'apkpure', 'apkmirror', 'morphe-api', 'demo'] as const;
+const DEFAULT_ORDER = ['apkpure', 'apkmirror', 'fdroid', 'github', 'morphe-api', 'demo'] as const;
 
 export function allProviders(): Provider[] {
   return [
-    new FdroidProvider(),
-    new GithubReleasesProvider(),
     new ApkPureProvider(),
     new ApkMirrorProvider(),
+    new FdroidProvider(),
+    new GithubReleasesProvider(),
     new MorpheApiProvider(),
     new DemoProvider(),
   ];

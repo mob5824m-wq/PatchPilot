@@ -39,8 +39,8 @@ npm run cli -- list
 2. **Ranks the versions.** Per app it shows every supported version, marks the experimental ones, and recommends the
    newest *stable* target (a target counts as experimental when no stable patch covers it). Version comparison is
    numeric-segment aware, so `21.10` sorts above `21.9` — plain string sorting gets that wrong.
-3. **Asks the sources.** Sources run in priority order: F-Droid, GitHub releases, APKPure, APKMirror, and Morphe's own
-   download helper. Each reports what it found (or why it found nothing) into a live job log.
+3. **Asks the sources.** Sources run in priority order: APKPure, APKMirror, F-Droid, GitHub releases and Morphe's own
+   download helper. Each reports what it found — or exactly why it found nothing — into a live job log.
 4. **Verifies before saving.** The download is opened, its binary `AndroidManifest.xml` decoded, its APK Signing Block
    (v2/v3) parsed, and the result compared with the bundle. Wrong package, wrong version, wrong file type or a foreign
    signing certificate means the file is deleted, not filed.
@@ -78,12 +78,18 @@ src/server/apk/fixture.ts    builds genuine fixture APKs (manifest + v2 signatur
 
 | Source | Kind | Notes |
 | --- | --- | --- |
+| **APKPure** | file | Primary source. Reads the version list first (no HTML scraping), then requests the exact `versionCode` from `d.apkpure.com`; falls back to scraping the versions page. |
+| **APKMirror** | file (scraped) | Primary source. Walks search → release → variant → `download.php` form with a cookie jar, matching the version slug rather than page text. Cloudflare is detected and reported, not silently swallowed. |
 | **F-Droid** | file | Official API, exact builds by version code. Only covers apps published on F-Droid. |
 | **GitHub releases** | file | Uses `config/github-apps.json` to map packages to repositories. Add your own entries. |
-| **APKPure** | file | Long version archive; uses an undocumented version-list endpoint plus its `d.apkpure.com` download URL. |
-| **APKMirror** | file (scraped) | Walks search → release → variant → download form. Cloudflare often blocks automated requests; the job log says so. |
 | **Morphe helper** | page | `api.morphe.software` — the lookup Morphe Manager itself performs. Returns a mirror page; PatchPilot crawls it for a direct file first. |
 | **Offline fixture** | file | Off by default. Generates a stand-in APK with the requested package/version for demos and tests. Never a real app. |
+
+APKPure and APKMirror come first because they are the only sources that keep every historical release of a Play
+Store app; a patch that targets YouTube 21.43.523 needs that exact build, and F-Droid will never have it. Both
+mirrors match on **version code** as well as version name, so an app that shipped several builds under one name still
+resolves to the right one, and both distinguish a Cloudflare challenge from a real "not found" so the job log tells
+you which happened.
 
 Sources can be reordered, disabled, and probed for reachability in the **Sources** tab. Nothing is hard-wired: if a
 mirror changes its HTML, the failure is visible in the job log instead of a silent wrong download.
@@ -198,6 +204,12 @@ fixtures/testkey/    throwaway key/cert that signs generated fixtures
 Tests cover version ordering, both bundle formats, catalog merging and recommendation, the zip/AXML/signing-block
 readers (against a real APK and generated ones), every verification check, offline registry loading, and a complete
 download → verify → library job — including the case where a source hands back the wrong version.
+
+The two mirrors get their own suite: their page and JSON parsers are tested against saved copies of real
+APKMirror/APKPure responses in `fixtures/pages`, and both providers are driven end-to-end against a local HTTP server
+that replays those pages — search, release, variant, `download.php` POST, `d.apkpure.com` redirect, a Cloudflare
+interstitial, and a scrape-only fallback for APKPure. That keeps the archive-walking logic honest without touching the
+live sites.
 
 `fixtures/README.md` explains where the sample APK, bundle snapshots and test key come from.
 
