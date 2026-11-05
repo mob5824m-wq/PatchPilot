@@ -2,10 +2,15 @@
 
 Generated from conventional commits by `npm run changelog` — do not edit by hand.
 
-## Unreleased
+## v0.2.0 — 2026-11-05
+
+### Features
+
+- split checks, Doctor, background downloads, changelog (b1b999e)
 
 ### Build and tooling
 
+- publish the Gradle failure to the job summary, floor versionCode at 1 (073e88b)
 - ignore local release artifacts (1f5b758)
 
 ### Other changes
