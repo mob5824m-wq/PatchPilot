@@ -24,7 +24,12 @@ function matches(source: string, pattern: RegExp): string[] {
 }
 
 test('every action the page calls exists in the shell, and vice versa', () => {
-  const implemented = new Set(matches(nativeShell, /case\s+"([^"]+)":/g));
+  // Actions dispatched from the switch, plus the ones a constant names because
+  // they are answered later (the folder picker waits for its activity result).
+  const implemented = new Set([
+    ...matches(nativeShell, /case\s+"([^"]+)":/g),
+    ...matches(nativeShell, /static final String ACTION_[A-Z_]+\s*=\s*"([^"]+)"/g),
+  ]);
   const used = new Set(matches(nativeTs, /this\.bridge\.call\(\s*'([^']+)'/g));
 
   assert.ok(used.size >= 10, `expected the full action list, found ${used.size}`);
@@ -168,4 +173,27 @@ test('the launch theme exists and matches the badge', () => {
   // One colour of record: the plate in the logo is the window background.
   assert.match(colours, /<color name="launch_background">#080b10<\/color>/);
   assert.match(logo, /#080d13/, 'brand/logo.svg should carry the same dark plate');
+});
+
+test('the folder grant is the one way in, and it needs no storage permission', () => {
+  const shell = nativeShell;
+  const scanner = readFileSync(join(javaDir, 'MorpheScanner.java'), 'utf8');
+  const activity = readFileSync(join(javaDir, 'MainActivity.java'), 'utf8');
+
+  // The picker itself.
+  assert.match(shell, /Intent\.ACTION_OPEN_DOCUMENT_TREE/);
+  assert.match(shell, /FLAG_GRANT_PERSISTABLE_URI_PERMISSION/);
+  assert.match(shell, /takePersistableUriPermission/);
+  assert.match(activity, /NativeShell\.REQUEST_FOLDER/);
+  assert.match(activity, /onFolderPicked\(resultCode, data\)/);
+
+  // Reading the granted tree uses DocumentsContract, not a file path.
+  assert.match(scanner, /getPersistedUriPermissions\(\)/);
+  assert.match(scanner, /buildChildDocumentsUriUsingTree/);
+  assert.match(scanner, /openInputStream/);
+
+  // And it is not a back door to the whole filesystem: all-files access is
+  // deliberately not requested.
+  assert.doesNotMatch(manifest, /MANAGE_EXTERNAL_STORAGE/);
+  assert.doesNotMatch(manifest, /READ_MEDIA_/);
 });

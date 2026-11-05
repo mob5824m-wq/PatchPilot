@@ -177,6 +177,34 @@ test('Morphe not installed is not an error', async () => {
   assert.match(summariseDiscovery(discovery), /not installed/);
 });
 
+test('a granted folder is named in the outcome', async () => {
+  const reader = readerFor(
+    {
+      files: [
+        {
+          path: 'content://com.android.externalstorage.documents/tree/primary%3ADownload/document/primary%3ADownload%2Fpatches-2.0.0.mpp',
+          name: 'patches-2.0.0.mpp',
+          sizeBytes: 10,
+          kind: 'bundle',
+          folder: 'Download',
+        },
+      ],
+      folders: [{ uri: 'content://tree/primary%3ADownload', name: 'Download' }],
+    },
+    {
+      'content://com.android.externalstorage.documents/tree/primary%3ADownload/document/primary%3ADownload%2Fpatches-2.0.0.mpp':
+        'PK-not-really-a-zip',
+    },
+  );
+  const { sink, state } = sinkWith();
+
+  const discovery = await discoverMorphe(reader, sink);
+
+  assert.deepEqual(state.archives, ['patches-2.0.0.mpp']);
+  assert.deepEqual(discovery.folders, ['Download']);
+  assert.equal(discovery.found, true);
+});
+
 test('repository and patch-list detection are conservative', () => {
   assert.deepEqual(reposIn('github.com/A/b and https://github.com/c/d.git'), ['A/b', 'c/d']);
   assert.deepEqual(reposIn('https://github.com/owner/repo/releases/tag/v1'), ['owner/repo']);

@@ -149,6 +149,7 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
   const requests: string[] = [];
   const downloaded: string[] = [];
   const installed: string[] = [];
+  let folderGranted = false;
   let counter = 0;
 
   const rewrite = (url: string): string => {
@@ -236,21 +237,33 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
         case 'store.set':
           store.set(String(input.key), String(input.value));
           return true;
+        case 'morphe.pickFolder':
+          // The grant is what makes the folder readable on the next scan.
+          folderGranted = true;
+          return { granted: true, uri: 'content://com.android.externalstorage.documents/tree/primary%3ADownload' };
+
         case 'morphe.scan':
           return {
             installed: [{ package: 'app.morphe.manager', version: '1.24.1' }],
-            files: [
-              {
-                path: '/sdcard/Android/media/app.morphe.manager/files/sources.xml',
-                name: 'sources.xml',
-                sizeBytes: 64,
-                kind: 'preferences',
-              },
-            ],
+            // A granted folder is the only reachable place on a modern Android.
+            files: folderGranted
+              ? [
+                  {
+                    path: 'content://com.android.externalstorage.documents/tree/primary%3ADownload/document/primary%3ADownload%2Fsources.xml',
+                    name: 'sources.xml',
+                    sizeBytes: 64,
+                    kind: 'preferences',
+                    folder: 'Download',
+                  },
+                ]
+              : [],
+            folders: folderGranted ? [{ uri: 'content://tree/primary%3ADownload', name: 'Download' }] : [],
             unreadable: [
               { path: '/data/data/app.morphe.manager', reason: 'Android does not allow other apps to read this folder' },
             ],
-            notes: ['Read 1 file(s) Morphe left where other apps can reach them.'],
+            notes: folderGranted
+              ? ['Read 1 file(s) from the folder you granted.']
+              : ['Morphe is installed, but Android keeps its source list private to it.'],
             rooted: false,
             sdk: 34,
           };
@@ -616,7 +629,7 @@ test('demo fixtures can be pruned and Morphe can be opened', async () => {
   await harness.close();
 });
 
-test('reading Morphe fills the catalogue without anyone pasting a url', async () => {
+test('reading Morphe reports what Android allows, and nothing more', async () => {
   const harness = await startHarness({}, { loadSources: false });
 
   const empty = (await harness.backend.handle('GET', '/api/catalog', new URLSearchParams(), null)).body as {
@@ -627,19 +640,43 @@ test('reading Morphe fills the catalogue without anyone pasting a url', async ()
   const scan = (await harness.backend.handle('POST', '/api/morphe/scan', new URLSearchParams(), null)).body as {
     supported: boolean;
     notes: string[];
-    discovery: { found: boolean; filesRead: number; enabled: string[]; installed: { package: string }[] };
+    discovery: { found: boolean; filesRead: number; installed: { package: string }[]; folders: string[] };
   };
 
   assert.equal(scan.supported, true);
-  assert.equal(scan.discovery.found, true);
-  assert.equal(scan.discovery.filesRead, 1);
-  assert.deepEqual(scan.discovery.enabled, ['Morphe Patches']);
+  assert.equal(scan.discovery.found, false);
+  assert.equal(scan.discovery.filesRead, 0);
+  assert.deepEqual(scan.discovery.folders, []);
   assert.deepEqual(
     scan.discovery.installed.map((entry) => entry.package),
     ['app.morphe.manager'],
   );
+  assert.ok(scan.notes[0]?.includes('private'), 'the scan should say why nothing was read');
 
-  // The catalogue follows, and the result is remembered for the UI and the Doctor.
+  // Nothing was invented from the install alone.
+  const stillEmpty = (await harness.backend.handle('GET', '/api/catalog', new URLSearchParams(), null)).body as {
+    appCount: number;
+  };
+  assert.equal(stillEmpty.appCount, 0);
+
+  await harness.close();
+});
+
+test('one granted folder fills the catalogue without anyone pasting a url', async () => {
+  const harness = await startHarness({}, { loadSources: false });
+
+  const granted = (await harness.backend.handle('POST', '/api/morphe/folder', new URLSearchParams(), null)).body as {
+    supported: boolean;
+    notes: string[];
+    discovery: { found: boolean; filesRead: number; folders: string[]; enabled: string[] };
+  };
+
+  assert.equal(granted.supported, true);
+  assert.equal(granted.discovery.found, true);
+  assert.equal(granted.discovery.filesRead, 1);
+  assert.deepEqual(granted.discovery.folders, ['Download']);
+  assert.deepEqual(granted.discovery.enabled, ['Morphe Patches']);
+
   const catalog = (await harness.backend.handle('GET', '/api/catalog', new URLSearchParams(), null)).body as {
     appCount: number;
     morphe: { loaded: number };
@@ -653,11 +690,9 @@ test('reading Morphe fills the catalogue without anyone pasting a url', async ()
   assert.equal(cached.discovery?.found, true);
 
   const doctor = (await harness.backend.handle('GET', '/api/doctor', new URLSearchParams(), null)).body as {
-    checks: { id: string; status: string; detail: string }[];
+    checks: { id: string; status: string }[];
   };
-  const morpheCheck = doctor.checks.find((check) => check.id === 'morphe');
-  assert.ok(morpheCheck, 'the Doctor should report on Morphe');
-  assert.equal(morpheCheck.status, 'pass');
+  assert.equal(doctor.checks.find((check) => check.id === 'morphe')?.status, 'pass');
 
   await harness.close();
 });

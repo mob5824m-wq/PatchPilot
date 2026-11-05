@@ -243,6 +243,14 @@ app.post('/api/morphe/scan', (_request, response) => {
   });
 });
 
+app.post('/api/morphe/folder', (_request, response) => {
+  json(response, {
+    supported: false,
+    discovery: null,
+    notes: ['The folder picker is part of the Android app; a server has no such thing.'],
+  });
+});
+
 app.post('/api/bundles/import', async (request, response) => {
   const { sources } = request.body as { sources?: string };
   const outcome = await importBundleSources(String(sources ?? ''), {

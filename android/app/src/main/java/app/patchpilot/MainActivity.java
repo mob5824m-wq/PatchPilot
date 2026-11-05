@@ -173,6 +173,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == NativeShell.REQUEST_FOLDER) {
+            if (shell != null) shell.onFolderPicked(resultCode, data);
+            return;
+        }
         if (requestCode == REQUEST_FILE_CHOOSER) {
             if (filePathCallback == null) return;
             Uri[] results = null;

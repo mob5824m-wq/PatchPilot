@@ -55,6 +55,9 @@ export const api = {
 
   scanMorphe: () => fetch('/api/morphe/scan', { method: 'POST' }).then((response) => parse<MorpheScanResponse>(response)),
 
+  pickMorpheFolder: () =>
+    fetch('/api/morphe/folder', { method: 'POST' }).then((response) => parse<MorpheScanResponse>(response)),
+
   importBundles: (sources: string) =>
     fetch('/api/bundles/import', {
       method: 'POST',

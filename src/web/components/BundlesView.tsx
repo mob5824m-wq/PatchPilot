@@ -71,6 +71,22 @@ export function BundlesView({
       .catch(() => undefined);
   }, [standalone]);
 
+  async function grantFolder(): Promise<void> {
+    setBusy('folder');
+    try {
+      const result = await api.pickMorpheFolder();
+      setMorphe(result.discovery);
+      setMorpheNotes(result.notes);
+      const next = await api.bundles();
+      onChanged(next.bundles);
+      toast.push(result.notes[0] ?? 'Folder granted.', result.discovery?.found ? 'good' : 'info');
+    } catch (cause) {
+      toast.push((cause as Error).message, 'bad');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function readMorphe(): Promise<void> {
     setBusy('morphe');
     try {
@@ -279,15 +295,21 @@ export function BundlesView({
         <Card>
           <div className="card-head">
             <h2>Read from Morphe</h2>
-            <button type="button" className="ghost-button" onClick={() => void readMorphe()} disabled={busy !== null}>
-              {busy === 'morphe' ? <Spinner size={12} /> : '↻'} Scan this device
-            </button>
+            <div className="bundle-actions">
+              <button type="button" className="ghost-button" onClick={() => void grantFolder()} disabled={busy !== null}>
+                {busy === 'folder' ? <Spinner size={12} /> : '📁'} Give it a folder
+              </button>
+              <button type="button" className="ghost-button" onClick={() => void readMorphe()} disabled={busy !== null}>
+                {busy === 'morphe' ? <Spinner size={12} /> : '↻'} Scan this device
+              </button>
+            </div>
           </div>
           <p className="fine-print">
             PatchPilot looks for what Morphe Manager left where other apps can read it — a downloaded{' '}
             <code>.mpp</code>, a <code>patches-list.json</code>, or its source list. Android keeps an app's private
-            files private, so on most phones this can confirm Morphe is installed but not see inside it; the manual
-            import below is the way in when that happens. It runs once by itself on every launch.
+            files private, so the reliable answer is to grant one folder once: point it at Downloads, or wherever you
+            keep Morphe's bundles, and it is read on every launch from then on. No storage permission is involved, and
+            the grant survives restarts.
           </p>
           {morphe ? (
             <div className="morphe-report">
@@ -297,6 +319,9 @@ export function BundlesView({
                 </Badge>
                 <span>{summarise(morphe)}</span>
               </div>
+              {morphe.folders.length ? (
+                <div className="doctor-hint">Reading folder: {morphe.folders.join(', ')}</div>
+              ) : null}
               {morpeNotes.map((note) => (
                 <div key={note} className="doctor-hint">
                   {note}

@@ -109,6 +109,8 @@ export interface MorpheDiscovery {
   installed: { package: string; version: string | null }[];
   filesRead: number;
   sources: string[];
+  /** Folders the user granted through the system picker, which were read. */
+  folders: string[];
   enabled: string[];
   added: string[];
   notes: string[];

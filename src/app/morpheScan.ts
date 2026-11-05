@@ -1,5 +1,8 @@
 import { importBundleSources, type BundleImportOutcome } from '../shared/bundleImport.ts';
+import type { MorpheDiscovery } from '../shared/types.ts';
 import type { MorpheFileContents, MorpheScan } from './native.ts';
+
+export type { MorpheDiscovery };
 
 /**
  * Reads Morphe Manager's patch sources off the device.
@@ -28,23 +31,6 @@ export interface MorpheBundleSink {
   addRepo(repo: string): Promise<void>;
   addArchive(name: string, bytes: Uint8Array): Promise<string>;
   addPatchList(name: string, patchesList: unknown): Promise<string>;
-}
-
-export interface MorpheDiscovery {
-  scannedAt: string;
-  installed: { package: string; version: string | null }[];
-  /** Files that were actually read, out of the ones the scan listed. */
-  filesRead: number;
-  /** Repository URLs found in Morphe's own files. */
-  sources: string[];
-  /** Bundles that were already known and got switched on. */
-  enabled: string[];
-  /** Bundles that had to be added (a repository or a file). */
-  added: string[];
-  /** Why something was skipped, in the words the UI will show. */
-  notes: string[];
-  /** True when anything at all came back from Morphe. */
-  found: boolean;
 }
 
 const MAX_READS = 12;
@@ -172,6 +158,7 @@ export async function discoverMorphe(reader: MorpheReader, sink: MorpheBundleSin
     installed: scan.installed ?? [],
     filesRead,
     sources: [...sources],
+    folders: (scan.folders ?? []).map((folder) => folder.name),
     enabled: dedupe(enabled),
     added: dedupe(added),
     notes: dedupe(notes),

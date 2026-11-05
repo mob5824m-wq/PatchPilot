@@ -63,17 +63,22 @@ export interface NativeBridge {
 
 /** One file a Morphe scan could see, with why it was listed. */
 export interface MorpheFile {
+  /** A filesystem path, or a `content://` document URI from a granted folder. */
   path: string;
   name: string;
   sizeBytes: number;
   kind: string;
   modifiedAt?: number;
+  /** Set when the file came from a folder the user granted. */
+  folder?: string;
 }
 
 /** What `morphe.scan` found on the device, including what it could not read. */
 export interface MorpheScan {
   installed: { package: string; version: string | null }[];
   files: MorpheFile[];
+  /** Folders the user has granted through the system picker. */
+  folders?: { uri: string; name: string }[];
   unreadable: { path: string; reason: string }[];
   notes: string[];
   rooted: boolean;
@@ -208,6 +213,14 @@ export class Native {
   /** Asks the shell what of Morphe Manager it can see on this device. */
   async scanMorphe(): Promise<MorpheScan> {
     return this.bridge.call('morphe.scan', {}) as Promise<MorpheScan>;
+  }
+
+  /**
+   * Opens the system folder picker. One tap, kept across launches — the only way
+   * to read another app's folder on modern Android.
+   */
+  async pickMorpheFolder(): Promise<{ granted: boolean; uri?: string | null }> {
+    return this.bridge.call('morphe.pickFolder', {}) as Promise<{ granted: boolean; uri?: string | null }>;
   }
 
   /** Bytes for a file a scan reported; the shell refuses any other path. */

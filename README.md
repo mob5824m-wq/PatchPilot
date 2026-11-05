@@ -99,6 +99,9 @@ fills from what you tell it.
 - **Reading Morphe Manager** *(Android)*: every launch, PatchPilot asks Android what it can see of Morphe — its install,
   a `.mpp` or `patches-list.json` it left in a shared folder, and on a rooted device its own preferences file, which
   names the repositories it has. Anything found is loaded before you tap anything.
+- **Give it a folder** *(Android)*: grant Downloads — or wherever you keep Morphe's bundles — once through the system
+  picker. The grant is kept across restarts and scanned on every launch, so a `.mpp` or `patches-list.json` you drop
+  there is picked up without a second thought. No storage permission is involved.
 - **Bundles tab → Import from Morphe**: paste the sources from Morphe's patch-source screen, one per line
   (`owner/repo` or a full GitHub URL). Known bundles are switched on, new ones are fetched, and anything it cannot use
   (`https://…/patches.mpp`, a bare file name) is reported rather than half-imported.
@@ -109,9 +112,16 @@ The Catalog API reports the arithmetic (`morphe: { loaded, available }`) so the 
 from "nothing matches".
 
 **What "reading Morphe" can and cannot do.** Android does not let one app read another's private files, and Morphe keeps
-its source list there. So the read is best-effort by design: the install is always detected, shared-folder bundles are
-picked up whenever the OS allows it, and a rooted device gets the preferences file outright. When the answer is "nothing
-readable", the app says that in the Bundles tab and the Doctor — it never falls back to guessing which bundles you use.
+its source list there. Three routes are tried, in order of reliability:
+
+1. **A folder you grant once** (system picker) — works on every Android version, needs no storage permission, survives
+   restarts.
+2. **Shared storage** — `Android/media/<pkg>`, `Android/data/<pkg>/files`, `Download/Morphe`; readable on Android 10 and
+   older, and whenever Morphe writes somewhere shared.
+3. **Its private directories** — reachable only on a rooted device, where the preferences file names every source.
+
+When all three come up empty the app says exactly that in the Bundles tab and the Doctor. It never falls back to guessing
+which bundles you use.
 
 ## Doctor
 

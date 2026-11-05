@@ -53,8 +53,12 @@ Key pieces:
 - **Morphe-first catalog** — only the bundles your Morphe has loaded contribute patches, so the app never offers an APK
   version your patches reject.
 - **Reading Morphe** — `MorpheScanner.java` probes `app.morphe.manager` on every launch: the install, any
-  `.mpp` / `patches-list.json` in a shared folder, and its private preferences on a rooted device. Findings become
-  bundles automatically; when nothing is readable the app says so and leaves the manual import as the way in.
+  `.mpp` / `patches-list.json` in a shared folder or a folder you granted, and its private preferences on a rooted
+  device. Findings become bundles automatically; when nothing is readable the app says so and leaves the manual import
+  as the way in.
+- **The folder grant** — one tap on "Give it a folder" (`ACTION_OPEN_DOCUMENT_TREE`), kept with
+  `takePersistableUriPermission`, read through `DocumentsContract` on every launch. No storage permission, no
+  all-files access, and it survives restarts.
 - **Doctor** — storage, install permission, notifications, bundle freshness and per-source reachability, on one page.
 - **Launcher icon** — the hexagon seal as an adaptive icon (API 26+), with PNG mipmaps for 7.x and the same vector as
   the Android 13 monochrome icon. See [`brand/README.md`](../brand/README.md).
@@ -140,6 +144,11 @@ three things rather than pretending:
    on Android 10 and older, on a rooted device, or when Morphe itself writes somewhere shared.
 3. **Unreadable roots** — the folders that exist but are closed, so the UI can explain the difference between "nothing
    there" and "not allowed to look".
+
+The folder grant is the route that works everywhere: `ACTION_OPEN_DOCUMENT_TREE` hands over one directory, the shell
+takes a persistable read grant, and `DocumentsContract.buildChildDocumentsUriUsingTree` walks it — no storage permission
+and nothing near `MANAGE_EXTERNAL_STORAGE`, which the manifest deliberately never requests. Files from a granted tree
+come back as `content://` document URIs rather than paths, and are read through `openInputStream`.
 
 Bytes come back through `morphe.read`, which refuses any path a scan did not report. The page (`src/app/morpheScan.ts`)
 turns a bundle file into a loaded bundle, a patch list into an uploaded one, and a preferences file into repository URLs

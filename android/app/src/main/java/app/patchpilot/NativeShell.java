@@ -46,8 +46,25 @@ public class NativeShell {
         this.morphe = new MorpheScanner(activity);
     }
 
+    /** Request code for the folder picker; the activity matches on it. */
+    static final int REQUEST_FOLDER = 2001;
+
+    /**
+     * Answered from onActivityResult rather than dispatch(), so it is named here
+     * — the bridge contract test reads this constant to keep both sides in step.
+     */
+    private static final String ACTION_PICK_FOLDER = "morphe.pickFolder";
+
+    /** Set while the system folder picker is open, so its result can answer the call. */
+    private volatile String pendingFolderId;
+
     @JavascriptInterface
     public void call(final String id, final String action, final String payloadJson) {
+        // The folder picker answers out of onActivityResult, not out of dispatch().
+        if (ACTION_PICK_FOLDER.equals(action)) {
+            pickFolder(id);
+            return;
+        }
         pool.execute(() -> {
             try {
                 JSONObject payload = payloadJson == null || payloadJson.isEmpty()
@@ -148,6 +165,64 @@ public class NativeShell {
             default:
                 throw new IllegalArgumentException("Unknown action: " + action);
         }
+    }
+
+    /**
+     * Opens the system folder picker and keeps the grant across launches.
+     *
+     * This is the one way to read another app's folder on modern Android: the
+     * user hands over one directory (Downloads, or wherever Morphe's bundles were
+     * exported), and `takePersistableUriPermission` keeps it after a restart. No
+     * storage permission is involved.
+     */
+    private void pickFolder(final String id) {
+        pendingFolderId = id;
+        activity.runOnUiThread(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+            try {
+                activity.startActivityForResult(intent, REQUEST_FOLDER);
+            } catch (RuntimeException noPicker) {
+                pendingFolderId = null;
+                respond(id, null, "This device has no folder picker");
+            }
+        });
+    }
+
+    /** Called by the activity with the folder picker's result. */
+    public void onFolderPicked(final int resultCode, final Intent data) {
+        final String id = pendingFolderId;
+        pendingFolderId = null;
+        if (id == null) return;
+
+        Uri tree = data == null ? null : data.getData();
+        if (resultCode != Activity.RESULT_OK || tree == null) {
+            JSONObject cancelled = new JSONObject();
+            try {
+                cancelled.put("granted", false);
+            } catch (JSONException ignored) {
+                // Fixed key.
+            }
+            respond(id, cancelled, null);
+            return;
+        }
+
+        try {
+            activity.getContentResolver().takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException notPersistable) {
+            // The grant still works for this session; the next scan will say so.
+        }
+
+        JSONObject granted = new JSONObject();
+        try {
+            granted.put("granted", true);
+            granted.put("uri", tree.toString());
+        } catch (JSONException ignored) {
+            // Fixed keys.
+        }
+        respond(id, granted, null);
     }
 
     /**

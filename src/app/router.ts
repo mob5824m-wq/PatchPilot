@@ -4,6 +4,7 @@ import type {
   CatalogResponse,
   DoctorCheck,
   DownloadJob,
+  MorpheDiscovery,
   MorpheScanResponse,
   HealthResponse,
   ResolveCandidate,
@@ -129,6 +130,32 @@ export class LocalBackend {
       };
     }
     return this.catalogCache;
+  }
+
+  /** One read of Morphe, applied to the bundles and remembered in settings. */
+  private async discoverMorphe(): Promise<MorpheDiscovery> {
+    const discovery = await discoverMorphe(
+      {
+        scan: () => this.options.native.scanMorphe(),
+        read: (path) => this.options.native.readMorpheFile(path),
+      },
+      {
+        configs: () => this.options.bundles.getConfigs(),
+        enable: async (id) => {
+          await this.options.bundles.setEnabled(id, true);
+        },
+        addRepo: async (repo) => {
+          await this.options.bundles.addRepo(repo);
+        },
+        addArchive: async (name, bytes) => (await this.options.bundles.addUpload(name, bytes)).name,
+        addPatchList: async (name, list) => (await this.options.bundles.addPatchList(name, list)).name,
+      },
+    );
+
+    this.invalidate();
+    this.settings = { ...this.settings, morpheScan: discovery };
+    await this.options.saveSettings(this.settings);
+    return discovery;
   }
 
   private invalidate(): void {
@@ -277,26 +304,25 @@ export class LocalBackend {
     }
 
     if (route === 'POST /api/morphe/scan') {
-      const discovery = await discoverMorphe(
-        {
-          scan: () => this.options.native.scanMorphe(),
-          read: (path) => this.options.native.readMorpheFile(path),
-        },
-        {
-          configs: () => this.options.bundles.getConfigs(),
-          enable: async (id) => {
-            await this.options.bundles.setEnabled(id, true);
-          },
-          addRepo: async (repo) => {
-            await this.options.bundles.addRepo(repo);
-          },
-          addArchive: async (name, bytes) => (await this.options.bundles.addUpload(name, bytes)).name,
-          addPatchList: async (name, list) => (await this.options.bundles.addPatchList(name, list)).name,
-        },
-      );
-      this.invalidate();
-      this.settings = { ...this.settings, morpheScan: discovery };
-      await this.options.saveSettings(this.settings);
+      const discovery = await this.discoverMorphe();
+      return this.json({
+        supported: true,
+        discovery,
+        notes: [summariseDiscovery(discovery)],
+      } satisfies MorpheScanResponse);
+    }
+
+    if (route === 'POST /api/morphe/folder') {
+      const picked = await this.options.native.pickMorpheFolder();
+      if (!picked?.granted) {
+        return this.json({
+          supported: true,
+          discovery: this.settings.morpheScan ?? null,
+          notes: ['No folder was granted — nothing changed.'],
+        } satisfies MorpheScanResponse);
+      }
+      // A fresh scan, so the folder's contents are loaded in the same breath.
+      const discovery = await this.discoverMorphe();
       return this.json({
         supported: true,
         discovery,
