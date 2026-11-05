@@ -176,6 +176,7 @@ export async function describeApk(path: string): Promise<ApkFileInfo> {
   let versionName: string | null = null;
   let versionCode: number | null = null;
   let isSplit = false;
+  let splits: string[] | undefined;
 
   try {
     const names = reader.entries.map((entry) => entry.name);
@@ -190,6 +191,7 @@ export async function describeApk(path: string): Promise<ApkFileInfo> {
     } else {
       // A split bundle: describe it from its metadata, then from its base APK.
       container = container === 'zip' ? 'apkm' : container;
+      splits = names.filter((name) => name.toLowerCase().endsWith('.apk')).slice(0, 64);
       const metadata = await readBundleMetadata(reader);
       if (metadata) {
         packageName = metadata.packageName;
@@ -251,6 +253,7 @@ export async function describeApk(path: string): Promise<ApkFileInfo> {
     signerSha256,
     signingSchemes,
     metadataSource,
+    splits,
     warnings,
   };
 }

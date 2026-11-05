@@ -1,5 +1,6 @@
 import type {
   AppDetail,
+  DoctorReport,
   BundleInfo,
   CatalogResponse,
   DownloadJob,
@@ -29,6 +30,8 @@ const jsonHeaders = { 'content-type': 'application/json' };
 
 export const api = {
   health: () => fetch('/api/health').then((response) => parse<HealthResponse>(response)),
+
+  doctor: () => fetch('/api/doctor').then((response) => parse<DoctorReport>(response)),
 
   catalog: (refresh = false) =>
     fetch(`/api/catalog${refresh ? '?refresh=1' : ''}`).then((response) => parse<CatalogResponse>(response)),
@@ -129,6 +132,16 @@ export const api = {
     ),
 
   library: () => fetch('/api/library').then((response) => parse<{ entries: LibraryEntry[] }>(response)),
+
+  pruneLibrary: () =>
+    fetch('/api/library/prune', { method: 'POST' }).then((response) =>
+      parse<{ removed: number; entries: LibraryEntry[] }>(response),
+    ),
+
+  openMorphe: () =>
+    fetch('/api/open-morphe', { method: 'POST' }).then((response) =>
+      parse<{ opened: boolean; package: string | null; message: string }>(response),
+    ),
 
   removeLibraryEntry: (id: string) =>
     fetch(`/api/library/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((response) =>

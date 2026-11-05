@@ -19,7 +19,9 @@
     "version:next": "tsx scripts/next-version.ts",
     "release:notes": "tsx scripts/next-version.ts --notes-out release-notes.md",
     "android": "cd android && gradle assembleDebug",
-    "check:java": "node scripts/check-java.mjs"
+    "check:java": "node scripts/check-java.mjs",
+    "changelog": "tsx scripts/changelog.ts",
+    "changelog:check": "tsx scripts/changelog.ts --check"
   },
   "dependencies": {
     "express": "^5.3.0",

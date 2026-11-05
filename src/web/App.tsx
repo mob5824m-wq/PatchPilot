@@ -14,13 +14,14 @@ import { api, watchJob } from './api.ts';
 import { AppList } from './components/AppList.tsx';
 import { AppView } from './components/AppView.tsx';
 import { BundlesView } from './components/BundlesView.tsx';
+import { DoctorView } from './components/DoctorView.tsx';
 import { JobPanel } from './components/JobPanel.tsx';
 import { LibraryView } from './components/LibraryView.tsx';
 import { SourcesView } from './components/SourcesView.tsx';
 import { Badge, Spinner, ToastProvider, useToast } from './components/ui.tsx';
 import { relativeTime } from './format.ts';
 
-type Tab = 'apps' | 'library' | 'sources' | 'bundles';
+type Tab = 'apps' | 'library' | 'sources' | 'bundles' | 'doctor';
 
 function Shell(): ReactNode {
   const toast = useToast();
@@ -148,6 +149,7 @@ function Shell(): ReactNode {
               ['library', `Library${library.length ? ` · ${library.length}` : ''}`],
               ['sources', 'Sources'],
               ['bundles', `Bundles${bundleSummary.active ? ` · ${bundleSummary.active}` : ''}`],
+              ['doctor', 'Doctor'],
             ] as [Tab, string][]
           ).map(([id, label]) => (
             <button key={id} type="button" className={`tab ${tab === id ? 'tab-active' : ''}`} onClick={() => setTab(id)}>
@@ -223,6 +225,8 @@ function Shell(): ReactNode {
             }}
           />
         ) : null}
+
+        {tab === 'doctor' ? <DoctorView /> : null}
 
         {tab === 'sources' ? (
           <SourcesView

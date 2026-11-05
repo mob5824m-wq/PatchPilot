@@ -41,6 +41,8 @@ export interface ExpectedApp {
   versionCodes?: Record<string, number> | number[] | null;
   fileType?: ApkFileType | null;
   signatures?: string[] | null;
+  /** The device's own ABI, used to sanity check a bundle's split set. */
+  preferAbi?: string | null;
 }
 
 function expectedCodes(expected: ExpectedApp): number[] {
@@ -70,6 +72,73 @@ function fileTypeSatisfied(expected: ApkFileType | null | undefined, container: 
     default:
       return 'skip';
   }
+}
+
+/** `arm64-v8a` and `ARM64_V8A` are the same architecture spelled twice. */
+function normalizeAbi(value: string): string {
+  return value.trim().toLowerCase().replace(/-/g, '_');
+}
+
+const ABI_PRIORITY = ['arm64_v8a', 'armeabi_v7a', 'x86_64', 'x86'];
+
+/** Which ABI the bundle cares about, if it says: its own keys win over the device. */
+function wantedAbi(expected: ExpectedApp): string | null {
+  const declared = Object.keys(expected.versionCodes ?? {}).map(normalizeAbi);
+  for (const abi of ABI_PRIORITY) {
+    if (declared.includes(abi)) return abi;
+  }
+  if (declared.length) return declared[0] ?? null;
+  return expected.preferAbi ? normalizeAbi(expected.preferAbi) : null;
+}
+
+/**
+ * A split bundle is only as good as its parts: without a base APK it cannot be
+ * installed, and without the split for the device's ABI the patched app will
+ * either refuse to start or run unoptimised code.
+ */
+function splitChecks(file: ApkFileInfo, expected: ExpectedApp, expectedLabel: string): VerificationCheck | null {
+  const isBundle = file.container === 'apkm' || file.container === 'xapk' || file.container === 'apks' || file.container === 'zip';
+  if (!isBundle) return null;
+
+  const splits = (file.splits ?? []).map((name) => name.toLowerCase());
+  if (!splits.length) {
+    return {
+      id: 'splits',
+      label: 'Split contents',
+      status: 'skip',
+      detail: 'The bundle was not opened, so its split set could not be checked',
+    };
+  }
+
+  const hasBase = splits.some((name) => /(^|\/)base\.apk$/.test(name));
+  if (!hasBase) {
+    return {
+      id: 'splits',
+      label: 'Split contents',
+      status: 'fail',
+      detail: 'The bundle has no base.apk, so it cannot be installed',
+    };
+  }
+
+  const abi = wantedAbi(expected);
+  if (!abi) {
+    return {
+      id: 'splits',
+      label: 'Split contents',
+      status: 'pass',
+      detail: `base.apk plus ${splits.length - 1} split${splits.length === 2 ? '' : 's'} (no ABI to check against)`,
+    };
+  }
+
+  const hasAbi = splits.some((name) => normalizeAbi(name).includes(abi));
+  return {
+    id: 'splits',
+    label: 'Split contents',
+    status: hasAbi ? 'pass' : 'warn',
+    detail: hasAbi
+      ? `base.apk + ${abi} split for ${expectedLabel}`
+      : `No ${abi} split in this bundle — the patched app may not start on this device`,
+  };
 }
 
 function fileTypeHint(expected: ApkFileType): string {
@@ -198,6 +267,9 @@ export function verifyApk(file: ApkFileInfo, expected: ExpectedApp): Verificatio
           : `The patches need ${fileTypeHint(expected.fileType)} (${expected.fileType}), this is ${file.container.toUpperCase()}`,
     });
   }
+
+  const splitCheck = splitChecks(file, expected, expectedLabel);
+  if (splitCheck) checks.push(splitCheck);
 
   const failures = checks.filter((check) => check.status === 'fail');
   const warnings = checks.filter((check) => check.status === 'warn');

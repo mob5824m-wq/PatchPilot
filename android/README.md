@@ -48,6 +48,10 @@ Key pieces:
   Bundles pin a version code per ABI and mirrors serve a variant per ABI, so an arm64 phone asks for arm64.
 - **Auto-refresh** — patch bundles refresh in their own time (once at startup, then every `autoRefreshMinutes`), so the
   catalog does not go stale while the app is open.
+- **Background downloads** — `DownloadService` holds a foreground notification for the duration of a fetch, so a 200 MB
+  bundle survives the app going to the background.
+- **Doctor** — storage, install permission, notifications, bundle freshness and per-source reachability, on one page.
+- **Morphe hand-off** — "Open Morphe" after installing, when a known Morphe Manager package is present.
 
 ## Verification, on the phone
 
@@ -100,6 +104,8 @@ but cannot update an installation signed with a different key** — fine for try
 | --- | --- |
 | `INTERNET` | APKPure, APKMirror, GitHub, F-Droid |
 | `REQUEST_INSTALL_PACKAGES` | Offering the installer for a verified APK |
+| `FOREGROUND_SERVICE` / `..._DATA_SYNC` | Keeping a download running in the background |
+| `POST_NOTIFICATIONS` | The progress notification for that download |
 | `WRITE_EXTERNAL_STORAGE` (`maxSdkVersion=28`) | Writing into the public `Downloads` folder on Android 9 and older; Android 10+ uses MediaStore instead |
 
 No cleartext traffic: all requests go through `HttpBridge`, and the WebView only ever loads the app's own assets from
@@ -107,8 +113,8 @@ No cleartext traffic: all requests go through `HttpBridge`, and the WebView only
 
 ## Known limits
 
-- **Split bundles** are verified through their base APK. The bundle is saved intact, but PatchPilot cannot prove the
-  config splits match — the same caveat the desktop build documents.
+- **Split bundles** are verified through their base APK *and* their split list: `base.apk` is required, and a missing
+  split for the device's ABI is a warning. Density and language splits are not checked.
 - **No GitHub token**: authenticated GitHub requests are a desktop feature; the app uses the anonymous rate limit.
 - The app cannot be built or run in a CI container without an Android SDK; `test/standalone.test.ts` exercises the
   standalone backend against a fake shell so the logic is covered regardless.

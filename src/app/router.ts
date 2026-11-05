@@ -2,12 +2,14 @@ import { defaultSettings } from '../shared/defaults.ts';
 import type {
   ApkFileType,
   CatalogResponse,
+  DoctorCheck,
   DownloadJob,
   HealthResponse,
   ResolveCandidate,
   Settings,
 } from '../shared/types.ts';
 import { verifyApk, type ExpectedApp } from '../shared/verifyMeta.ts';
+import { bundleChecks, libraryChecks, providerChecks, report, settingsChecks } from '../shared/doctor.ts';
 import { buildAppDetail, buildCatalog } from '../server/catalog.ts';
 import { request } from '../server/http.ts';
 import type { Provider } from '../server/providers/types.ts';
@@ -336,6 +338,58 @@ export class LocalBackend {
 
     /* --------------------------------------------------------------- settings --- */
 
+    if (route === 'GET /api/doctor') {
+      const providers = activeAppProviders(this.settings);
+      const device = await this.options.native.state();
+
+      const free = device.freeBytes ?? 0;
+      const gigabytes = free / 1024 / 1024 / 1024;
+      const storage: DoctorCheck = {
+        id: 'storage',
+        label: 'Storage',
+        status: gigabytes >= 2 ? 'pass' : gigabytes >= 0.5 ? 'warn' : 'fail',
+        detail: `${gigabytes.toFixed(1)} GB free of ${((device.totalBytes ?? 0) / 1024 / 1024 / 1024).toFixed(0)} GB`,
+        hint: gigabytes >= 2 ? null : 'A split bundle can be 200 MB; free space before downloading.',
+      };
+
+      const install: DoctorCheck = {
+        id: 'install',
+        label: 'Install permission',
+        status: device.installAllowed ? 'pass' : 'warn',
+        detail: device.installAllowed
+          ? 'PatchPilot may offer downloaded APKs to the installer.'
+          : 'Android has not allowed this app to install APKs yet.',
+        hint: device.installAllowed ? null : 'Allow “install unknown apps” for PatchPilot when the installer asks.',
+      };
+
+      const notifications: DoctorCheck = {
+        id: 'notifications',
+        label: 'Download notifications',
+        status: device.notifications === false ? 'warn' : 'pass',
+        detail: device.notifications === false ? 'Notifications are off, so background progress is hidden.' : 'On.',
+        hint: device.notifications === false ? 'Enable notifications to watch a long download.' : null,
+      };
+
+      return this.json(
+        report('device', [
+          storage,
+          install,
+          notifications,
+          ...bundleChecks(this.options.bundles.infos()),
+          ...libraryChecks(await this.options.library.list()),
+          ...settingsChecks(this.settings, activeAppProviders(this.settings).length),
+          ...(await providerChecks(providers)),
+          {
+            id: 'version',
+            label: 'Version',
+            status: 'pass',
+            detail: `PatchPilot ${this.options.version} on ${this.options.native.device.model} (Android SDK ${this.options.native.device.sdk})`,
+            hint: null,
+          },
+        ]),
+      );
+    }
+
     if (route === 'GET /api/settings') return this.json(this.settings);
 
     if (route === 'PUT /api/settings') {
@@ -395,6 +449,23 @@ export class LocalBackend {
 
     if (route === 'GET /api/library') return this.json({ entries: await this.options.library.list() });
 
+    if (route === 'POST /api/library/prune') {
+      const removed = await this.options.library.pruneDemo();
+      return this.json({ removed, entries: await this.options.library.list() });
+    }
+
+    if (route === 'POST /api/open-morphe') {
+      const result = await this.options.native.openMorphe();
+      const opened = Boolean(result?.package);
+      return this.json({
+        opened,
+        package: result?.package ?? null,
+        message: opened
+          ? `Opened ${result?.package}`
+          : 'Morphe Manager is not installed on this device',
+      });
+    }
+
     if (parts.length === 3 && parts[1] === 'library' && method(route) === 'DELETE') {
       return this.json({ removed: await this.options.library.remove(decodeURIComponent(parts[2] ?? '')) });
     }
@@ -440,6 +511,7 @@ export class LocalBackend {
         versionCodes: target?.versionCodes ?? null,
         fileType: (app?.fileType ?? null) as ApkFileType | null,
         signatures: app?.signatures ?? [],
+        preferAbi: this.settings.preferAbi,
       };
       const verification = verifyApk(file, expected);
 

@@ -85,6 +85,31 @@ export function LibraryView({
     }
   }
 
+  async function openMorphe(): Promise<void> {
+    try {
+      const result = await api.openMorphe();
+      toast.push(result.message, result.opened ? 'good' : 'info');
+    } catch (cause) {
+      toast.push((cause as Error).message, 'bad');
+    }
+  }
+
+  async function pruneDemo(): Promise<void> {
+    setBusyId('prune');
+    try {
+      const result = await api.pruneLibrary();
+      await onChanged();
+      toast.push(
+        result.removed ? `Removed ${result.removed} demo fixture${result.removed === 1 ? '' : 's'}` : 'Nothing to remove',
+        'good',
+      );
+    } catch (cause) {
+      toast.push((cause as Error).message, 'bad');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function install(entry: LibraryEntry): Promise<void> {
     setBusyId(entry.id);
     try {
@@ -123,9 +148,21 @@ export function LibraryView({
               : 'Copy a link and open it on your phone (same Wi-Fi) to pull the file straight into it.'}
           </p>
         </div>
-        <button type="button" className="ghost-button" onClick={onGoToApps}>
-          Back to apps
-        </button>
+        <div className="library-head-actions">
+          {standalone ? (
+            <button type="button" className="ghost-button" onClick={() => void openMorphe()}>
+              Open Morphe
+            </button>
+          ) : null}
+          {entries.some((entry) => entry.demo) ? (
+            <button type="button" className="ghost-button" onClick={() => void pruneDemo()}>
+              Remove demo files
+            </button>
+          ) : null}
+          <button type="button" className="ghost-button" onClick={onGoToApps}>
+            Back to apps
+          </button>
+        </div>
       </Card>
 
       <div className="library-grid">

@@ -31,6 +31,7 @@ npm run dev      # server + Vite in one process (single port)
 npm start        # build the web UI, then serve it
 npm test         # parsers, mirrors, catalog, verification, job flow, releases, UI render
 npm run check:java     # parse the Android sources without a Gradle build
+npm run changelog      # regenerate CHANGELOG.md from the commit log
 npm run version:next   # what the next release would be called, from the commit log
 npm run cli -- list
 ```
@@ -78,6 +79,13 @@ src/server/apk/signblock.ts  APK Signing Block v2/v3 → certificate digests
 src/server/apk/verify.ts     container detection, split bundle handling, the five checks
 src/server/apk/fixture.ts    builds genuine fixture APKs (manifest + v2 signature) for tests
 ```
+
+## Doctor
+
+The **Doctor** tab runs every check that explains a failure which is nobody's fault: each enabled source is contacted
+once (distinguishing "down" from "refusing automated requests"), the bundles are checked for age and emptiness, the
+library for size and unchecked files, and — on the phone — storage, install permission and notifications. Every problem
+comes with a hint, and the same checks run on the server and on the device.
 
 ## Sources
 
@@ -148,6 +156,9 @@ Merging into `main` is the release. The version is not typed anywhere by hand:
    | `patchpilot-<version>.tar.gz` | The whole server: `dist/`, `src/`, `config/`, `fixtures/`, `package*.json` |
    | `patchpilot-android-<version>.apk` | The Android client, `versionName`/`versionCode` taken from the tag |
    | `SHA256SUMS` | Checksums for both |
+
+`CHANGELOG.md` is generated from the same commits (`npm run changelog`) and committed by the same workflow step that
+keeps `package.json` in step, so the file and the GitHub releases never disagree.
 
 No release commit is needed: the tag is the source of truth and `PATCHPILOT_VERSION` carries it into the build. The
 workflow does push a `chore(release): vX.Y.Z [skip ci]` commit afterwards so `package.json` stays in step, but the

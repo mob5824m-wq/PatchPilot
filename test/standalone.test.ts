@@ -235,6 +235,17 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
         case 'store.set':
           store.set(String(input.key), String(input.value));
           return true;
+        case 'app.openMorphe':
+          return { package: 'app.morphe.manager' };
+
+        case 'device.state':
+          return {
+            freeBytes: 12 * 1024 * 1024 * 1024,
+            totalBytes: 64 * 1024 * 1024 * 1024,
+            installAllowed: true,
+            notifications: true,
+          };
+
         case 'apk.install':
           installed.push(String(input.handle));
           return true;
@@ -484,6 +495,62 @@ test('the phone asks the mirrors for its own ABI', () => {
   assert.equal(abiPreference(['riscv64']), 'riscv64');
   assert.equal(abiPreference([]), null);
   assert.equal(abiPreference(undefined), null);
+});
+
+test('demo fixtures can be pruned and Morphe can be opened', async () => {
+  const harness = await startHarness();
+
+  // A demo file is one whose name carries the -DEMO marker.
+  const published = await harness.shell.native.publish(
+    (await harness.shell.native.download({ url: 'https://apkpure.com/cdn/youtube.apk' })).path,
+    'com.google.android.youtube_21.43.523-DEMO.apk',
+  );
+  assert.ok(published.name.includes('DEMO'));
+
+  const listed = (await harness.backend.handle('GET', '/api/library', new URLSearchParams(), null)).body as {
+    entries: { demo: boolean }[];
+  };
+  assert.equal(listed.entries.length, 1);
+  assert.equal(listed.entries[0]!.demo, true);
+
+  const pruned = (await harness.backend.handle('POST', '/api/library/prune', new URLSearchParams(), null)).body as {
+    removed: number;
+    entries: unknown[];
+  };
+  assert.equal(pruned.removed, 1);
+  assert.equal(pruned.entries.length, 0);
+  assert.equal(harness.shell.library.size, 0);
+
+  const morphe = (await harness.backend.handle('POST', '/api/open-morphe', new URLSearchParams(), null)).body as {
+    opened: boolean;
+    package: string | null;
+  };
+  assert.equal(morphe.opened, true);
+  assert.equal(morphe.package, 'app.morphe.manager');
+
+  await harness.close();
+});
+
+test('the Doctor reports device, bundle and source health in one place', async () => {
+  const harness = await startHarness();
+
+  const report = (await harness.backend.handle('GET', '/api/doctor', new URLSearchParams(), null)).body as {
+    mode: string;
+    checks: { id: string; status: string; detail: string }[];
+    summary: { pass: number; warn: number; fail: number; skip: number };
+  };
+
+  assert.equal(report.mode, 'device');
+  const ids = report.checks.map((check) => check.id);
+  for (const required of ['storage', 'install', 'bundles', 'library', 'sources', 'version']) {
+    assert.ok(ids.includes(required), `doctor is missing ${required}`);
+  }
+  const storage = report.checks.find((check) => check.id === 'storage');
+  assert.equal(storage?.status, 'pass');
+  assert.match(storage?.detail ?? '', /12\.0 GB free of 64 GB/);
+  assert.equal(report.summary.fail, 0);
+
+  await harness.close();
 });
 
 test('bundles refresh from GitHub and fall back to the snapshot when the network is gone', async () => {

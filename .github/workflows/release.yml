@@ -159,7 +159,7 @@ jobs:
             "patchpilot-android-${{ steps.version.outputs.version }}.apk" \
             SHA256SUMS
 
-      - name: Keep package.json in step with the tag
+      - name: Keep package.json and the changelog in step with the tag
         if: steps.version.outputs.release == 'true'
         # A version commit is convenience, not the source of truth (the tag is).
         # If the branch is protected, the release still stands — hence the guard.
@@ -168,7 +168,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json
+          # The tag exists now, so the changelog can describe this release.
+          npm run changelog
+          git add package.json package-lock.json CHANGELOG.md
           git diff --cached --quiet && exit 0
           git commit -m "chore(release): ${{ steps.version.outputs.tag }} [skip ci]"
           git push origin "HEAD:${GITHUB_REF_NAME}"

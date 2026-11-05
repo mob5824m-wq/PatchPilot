@@ -81,8 +81,18 @@ public class NativeShell {
             case "net.request":
                 return http.request(payload);
 
-            case "net.download":
-                return http.download(payload, progress -> emit(id, progress));
+            case "net.download": {
+                // A download has to survive the app going to the background.
+                DownloadService.start(activity, payload.optString("fileName", "APK"));
+                try {
+                    return http.download(payload, progress -> {
+                        emit(id, progress);
+                        DownloadService.progress(progress);
+                    });
+                } finally {
+                    DownloadService.stop(activity);
+                }
+            }
 
             case "apk.inspect":
                 return inspector.inspect(payload.getString("path"));
@@ -93,6 +103,12 @@ public class NativeShell {
             case "apk.install":
                 install(payload.getString("handle"));
                 return true;
+
+            case "app.openMorphe":
+                return openMorphe();
+
+            case "device.state":
+                return deviceState();
 
             case "library.publish":
                 return library.publish(payload.getString("path"), payload.getString("name"));
@@ -124,6 +140,54 @@ public class NativeShell {
             default:
                 throw new IllegalArgumentException("Unknown action: " + action);
         }
+    }
+
+    /**
+     * Opens Morphe Manager if it is installed. There is no shared contract for its
+     * package id (it is a ReVanced Manager fork, and debug builds differ), so a
+     * short list is tried and a miss is reported rather than guessed at.
+     */
+    private JSONObject openMorphe() throws JSONException {
+        String[] candidates = {
+                "app.morphe.manager",
+                "app.morphe.manager.debug",
+                "app.revanced.manager.flutter",
+                "app.revanced.manager",
+        };
+        android.content.pm.PackageManager manager = activity.getPackageManager();
+        JSONObject result = new JSONObject();
+        for (String candidate : candidates) {
+            Intent launch = manager.getLaunchIntentForPackage(candidate);
+            if (launch == null) continue;
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                activity.startActivity(launch);
+                result.put("package", candidate);
+                return result;
+            } catch (RuntimeException ignored) {
+                // Try the next candidate.
+            }
+        }
+        result.put("package", JSONObject.NULL);
+        return result;
+    }
+
+    /** Facts the Doctor screen needs: room to download, and whether it may install. */
+    private JSONObject deviceState() throws JSONException {
+        JSONObject state = new JSONObject();
+
+        android.os.StatFs stats = new android.os.StatFs(activity.getFilesDir().getAbsolutePath());
+        state.put("freeBytes", stats.getAvailableBytes());
+        state.put("totalBytes", stats.getTotalBytes());
+
+        boolean installAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || activity.getPackageManager().canRequestPackageInstalls();
+        state.put("installAllowed", installAllowed);
+
+        android.app.NotificationManager notifications =
+                (android.app.NotificationManager) activity.getSystemService(Activity.NOTIFICATION_SERVICE);
+        state.put("notifications", notifications != null && notifications.areNotificationsEnabled());
+        return state;
     }
 
     /* ------------------------------------------------------------- utilities --- */

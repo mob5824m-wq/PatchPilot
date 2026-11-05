@@ -1575,3 +1575,78 @@ p {
     gap: 4px;
   }
 }
+
+/* Doctor --------------------------------------------------------------- */
+
+.doctor-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.doctor-summary {
+  display: flex;
+  gap: 8px;
+}
+
+.doctor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.doctor-row {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  border-left: 3px solid transparent;
+  padding-left: 12px;
+}
+
+.doctor-row:last-child {
+  border-bottom: none;
+}
+
+.doctor-pass {
+  border-left-color: #16a34a;
+}
+
+.doctor-warn {
+  border-left-color: #d97706;
+}
+
+.doctor-fail {
+  border-left-color: #dc2626;
+}
+
+.doctor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doctor-label {
+  font-weight: 600;
+}
+
+.doctor-detail {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-dim, #475569);
+}
+
+.doctor-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim, #64748b);
+  font-style: italic;
+}
+
+.library-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

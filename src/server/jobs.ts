@@ -169,6 +169,7 @@ export class JobManager extends EventEmitter {
       versionCodes: job.request.versionCodes,
       fileType: job.request.fileType,
       signatures: job.request.signatures,
+      preferAbi: settings.preferAbi,
     };
 
     if (!providers.length) {

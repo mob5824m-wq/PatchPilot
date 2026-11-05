@@ -36,6 +36,8 @@ export interface NativeApkInfo {
   targetSdk: number | null;
   /** Set by `apk.inspectBytes`: where the shell put the temporary copy. */
   tempPath?: string | null;
+  /** APK entry names inside a split bundle. */
+  splits?: string[];
 }
 
 export interface NativeLibraryFile {
@@ -57,6 +59,13 @@ export interface NativeDevice {
 
 export interface NativeBridge {
   call(action: string, payload: unknown, onEvent?: (event: Record<string, unknown>) => void): Promise<unknown>;
+}
+
+export interface DeviceState {
+  freeBytes: number;
+  totalBytes: number;
+  installAllowed: boolean;
+  notifications: boolean;
 }
 
 export interface DownloadProgress {
@@ -163,6 +172,16 @@ export class Native {
 
   async toast(message: string): Promise<void> {
     await this.bridge.call('ui.toast', { message });
+  }
+
+  /** Storage, install permission and notification state, for the Doctor. */
+  async state(): Promise<DeviceState> {
+    return this.bridge.call('device.state', {}) as Promise<DeviceState>;
+  }
+
+  /** Opens Morphe Manager, if a known package for it is installed. */
+  async openMorphe(): Promise<{ package: string | null }> {
+    return this.bridge.call('app.openMorphe', {}) as Promise<{ package: string | null }>;
   }
 
   /** Hands a saved APK to the system installer. */

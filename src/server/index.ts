@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { existsSync } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type {
   ApkFileType,
@@ -10,6 +10,7 @@ import type {
   Settings,
 } from '../shared/types.ts';
 import { describeApk, verifyApk, type ExpectedApp } from './apk/verify.ts';
+import { bundleChecks, libraryChecks, providerChecks, report, settingsChecks } from '../shared/doctor.ts';
 import { buildAppDetail, buildCatalog } from './catalog.ts';
 import {
   APP_VERSION,
@@ -28,7 +29,7 @@ import {
 import { BundleRegistry } from './bundles/registry.ts';
 import { JobManager } from './jobs.ts';
 import { addToLibrary, listLibrary, libraryFilePath, pruneLibrary, removeFromLibrary } from './library.ts';
-import { providerStatus, probeProvider } from './providers/index.ts';
+import { activeProviders, providerStatus, probeProvider } from './providers/index.ts';
 import { HttpError } from './http.ts';
 
 const app = express();
@@ -294,6 +295,43 @@ app.post('/api/providers/order', async (request, response) => {
 
 /* ---------------------------------------------------------------- settings --- */
 
+/**
+ * One page for the failures that are nobody's fault: blocked mirrors, a stale
+ * bundle, a full disk. Same checks the Android app runs, minus the device ones.
+ */
+app.get('/api/doctor', async (_request, response) => {
+  const enabled = activeProviders(settings);
+  const providers = await providerChecks(enabled);
+
+  let storage: { status: 'pass' | 'fail'; detail: string };
+  try {
+    const probe = join(dataDir, '.doctor-check');
+    await writeFile(probe, 'ok');
+    await rm(probe, { force: true });
+    storage = { status: 'pass', detail: `Writable: ${dataDir}` };
+  } catch (error) {
+    storage = { status: 'fail', detail: `Cannot write to ${dataDir}: ${(error as Error).message}` };
+  }
+
+  json(
+    response,
+    report('server', [
+      { id: 'storage', label: 'Data folder', status: storage.status, detail: storage.detail, hint: null },
+      ...bundleChecks(registry.getInfos()),
+      ...libraryChecks(await listLibrary()),
+      ...settingsChecks(settings, enabled.length),
+      ...providers,
+      {
+        id: 'version',
+        label: 'Version',
+        status: 'pass',
+        detail: `PatchPilot ${APP_VERSION}${BUILD_COMMIT ? ` (${BUILD_COMMIT})` : ''} on Node ${process.version}`,
+        hint: null,
+      },
+    ]),
+  );
+});
+
 app.get('/api/settings', (_request, response) => {
   json(response, settings);
 });
@@ -390,6 +428,13 @@ app.get('/api/library', async (_request, response) => {
   json(response, { entries: await pruneLibrary() });
 });
 
+app.post('/api/library/prune', async (_request, response) => {
+  const entries = await listLibrary();
+  const demo = entries.filter((entry) => entry.demo);
+  for (const entry of demo) await removeFromLibrary(entry.id);
+  json(response, { removed: demo.length, entries: await listLibrary() });
+});
+
 app.delete('/api/library/:id', async (request, response) => {
   json(response, { removed: await removeFromLibrary(request.params.id) });
 });
@@ -442,6 +487,7 @@ app.post('/api/verify', express.raw({ type: '*/*', limit: '1024mb' }), async (re
       versionCodes: target_?.versionCodes ?? null,
       fileType: (app?.fileType ?? null) as ApkFileType | null,
       signatures: app?.signatures ?? [],
+      preferAbi: settings.preferAbi,
     };
     const verification = verifyApk(file, expected);
 

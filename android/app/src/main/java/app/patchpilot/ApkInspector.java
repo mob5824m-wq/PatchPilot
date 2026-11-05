@@ -53,19 +53,27 @@ public class ApkInspector {
         long size = file.length();
 
         File target = file;
-        File extracted = null;
+        BaseApk extracted = null;
         try {
             if (split) {
                 extracted = extractBaseApk(file);
-                target = extracted;
+                target = extracted.file;
             }
             JSONObject result = describe(target);
             result.put("sizeBytes", size);
             result.put("isSplit", split);
+            if (extracted != null) {
+                // The split set is what tells a bundle apart from a renamed zip:
+                // without a base APK it cannot install, without an ABI split it
+                // will not start on this phone.
+                JSONArray splits = new JSONArray();
+                for (String name : extracted.names) splits.put(name);
+                result.put("splits", splits);
+            }
             return result;
         } finally {
             if (extracted != null) //noinspection ResultOfMethodCallIgnored
-                extracted.delete();
+                extracted.file.delete();
         }
     }
 
@@ -157,25 +165,37 @@ public class ApkInspector {
      * APKs, not containers, so the base APK is copied out first — exactly what
      * the desktop reader does.
      */
-    private File extractBaseApk(File bundle) throws IOException {
+    private BaseApk extractBaseApk(File bundle) throws IOException {
         File base = null;
+        List<String> names = new ArrayList<>();
+        boolean foundBase = false;
         try (ZipInputStream zip = new ZipInputStream(new java.io.BufferedInputStream(new java.io.FileInputStream(bundle)))) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
                 String name = entry.getName().toLowerCase(Locale.ROOT);
                 boolean isApk = name.endsWith(".apk");
-                boolean isBase = name.equals("base.apk") || name.endsWith("/base.apk");
                 if (!isApk) continue;
-                if (base == null || isBase) {
+                if (names.size() < 64) names.add(entry.getName());
+                boolean isBase = name.equals("base.apk") || name.endsWith("/base.apk");
+                if (base == null || (isBase && !foundBase)) {
                     if (base != null) //noinspection ResultOfMethodCallIgnored
                         base.delete();
                     base = copyEntry(zip, name);
-                    if (isBase) break;
+                    foundBase = isBase;
                 }
             }
         }
-        if (base == null) throw new IOException("That bundle has no APK inside it");
-        return base;
+        if (base == null) throw new IOException("That bundle has no base.apk inside it");
+        BaseApk result = new BaseApk();
+        result.file = base;
+        result.names = names;
+        return result;
+    }
+
+    /** The extracted base APK plus the bundle's full split list. */
+    private static final class BaseApk {
+        File file;
+        List<String> names;
     }
 
     private File copyEntry(InputStream stream, String name) throws IOException {

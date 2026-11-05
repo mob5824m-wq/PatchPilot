@@ -54,6 +54,7 @@ export function toApkFileInfo(observed: NativeApkInfo, fileName: string, handle:
     signerSha256: observed.signerSha256 ?? [],
     signingSchemes: observed.signingSchemes ?? [],
     metadataSource: observed.packageName ? 'manifest' : 'unknown',
+    splits: observed.splits ?? undefined,
     warnings: [],
   };
 }
@@ -166,6 +167,19 @@ export class LocalLibrary {
     return [...this.entries.values()]
       .map((entry) => this.withoutHandle(entry))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** Drops the offline demo fixtures; they are stand-ins, not real apps. */
+  async pruneDemo(): Promise<number> {
+    let removed = 0;
+    for (const [id, entry] of [...this.entries]) {
+      if (!entry.demo) continue;
+      await this.native.deleteLibraryFile(entry.handle).catch(() => false);
+      this.entries.delete(id);
+      removed += 1;
+    }
+    if (removed) await this.persist();
+    return removed;
   }
 
   async remove(id: string): Promise<boolean> {

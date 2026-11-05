@@ -174,6 +174,8 @@ export interface ApkFileInfo {
   signerSha256: string[];
   signingSchemes: string[];
   metadataSource: 'manifest' | 'bundle-info' | 'unknown';
+  /** Entry names inside a split bundle, so the split set can be judged. */
+  splits?: string[];
   warnings: string[];
   /** True for APKs built by PatchPilot's offline demo source. */
   demo?: boolean;
@@ -233,6 +235,24 @@ export interface Settings {
   preferAbi: string | null;
   autoRefreshMinutes: number;
   demoSource: boolean;
+}
+
+export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip';
+
+export interface DoctorCheck {
+  id: string;
+  label: string;
+  status: CheckStatus;
+  detail: string;
+  /** What to do about it, when something is wrong. */
+  hint?: string | null;
+}
+
+export interface DoctorReport {
+  generatedAt: string;
+  mode: 'server' | 'device';
+  checks: DoctorCheck[];
+  summary: { pass: number; warn: number; fail: number; skip: number };
 }
 
 export interface HealthResponse {
