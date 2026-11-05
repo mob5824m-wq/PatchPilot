@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BundleConfig, Settings } from '../shared/types.ts';
-import { defaultBundles, defaultSettings } from '../shared/defaults.ts';
+import { cloneDefaultBundles, defaultBundles, defaultSettings } from '../shared/defaults.ts';
 import { buildUserAgent } from '../shared/userAgent.ts';
 import { setUserAgent } from './http.ts';
 import { readJson, writeJson } from './store.ts';
@@ -54,7 +54,7 @@ export function ensureDirs(): void {
   }
 }
 
-export { defaultBundles, defaultSettings };
+export { cloneDefaultBundles, defaultBundles, defaultSettings };
 
 /** The demo source is on only where the environment asks for it. */
 const settingsDefaults: Settings = { ...defaultSettings, demoSource: demoSourceEnabled };
@@ -75,14 +75,15 @@ export async function loadBundleConfigs(): Promise<BundleConfig[]> {
   const stored = await readJson<BundleConfig[] | null>(bundlesPath, null);
   if (!stored) {
     await writeJson(bundlesPath, defaultBundles);
-    return [...defaultBundles];
+    return cloneDefaultBundles();
   }
   const byId = new Map(stored.map((bundle) => [bundle.id, bundle]));
   // Keep bundled defaults available even if the config file predates them.
   for (const fallback of defaultBundles) {
-    if (!byId.has(fallback.id)) byId.set(fallback.id, fallback);
+    if (!byId.has(fallback.id)) byId.set(fallback.id, { ...fallback });
   }
-  return [...byId.values()];
+  // Copies throughout: the registry mutates what it is given.
+  return [...byId.values()].map((bundle) => ({ ...bundle }));
 }
 
 export async function saveBundleConfigs(bundles: BundleConfig[]): Promise<void> {

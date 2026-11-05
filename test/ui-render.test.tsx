@@ -17,4 +17,11 @@ test('the app shell renders', async () => {
   assert.ok(html.includes('Library'));
   assert.ok(html.includes('Sources'));
   assert.ok(html.includes('Bundles'));
+
+  // The mark is inline SVG, so the shell carries the seal rather than a link
+  // that can 404. Its geometry is checked against brand/logo.svg in
+  // android-contract.test.ts.
+  assert.ok(html.includes('class="brand-mark"'), 'the header mark is missing');
+  assert.ok(html.includes('M16.00 5.97'), 'the header mark is not the PatchPilot seal');
+  assert.ok(html.includes('aria-label="PatchPilot"'), 'the mark should be labelled for screen readers');
 });

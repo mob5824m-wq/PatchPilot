@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The PatchPilot seal: a hexagon with a compass needle pointing at the right build.
+  Geometry mirrors brand/logo.svg. The 108dp canvas with a 62dp mark keeps it
+  inside the 66dp adaptive-icon safe zone, so no launcher mask clips an edge.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M54.00,22.91 75.06,37.95 75.06,70.05 54.00,85.09 32.94,70.05 32.94,37.95Z"
+        android:strokeColor="#6ee7a8"
+        android:strokeWidth="5.56"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M45.48,60.01L57.26,48.23"
+        android:strokeColor="#6ee7a8"
+        android:strokeWidth="5.56"
+        android:strokeLineCap="round" />
+
+    <path
+        android:fillColor="#6ee7a8"
+        android:pathData="M41.72,60.01a3.76,3.76 0 1,0 7.52,0a3.76,3.76 0 1,0 -7.52,0Z" />
+
+    <path
+        android:pathData="M63.78,41.72L59.79,52.98L52.51,45.71Z"
+        android:fillColor="#6ee7a8"
+        android:strokeColor="#6ee7a8"
+        android:strokeWidth="2.42"
+        android:strokeLineJoin="round" />
+</vector>

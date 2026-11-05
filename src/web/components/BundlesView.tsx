@@ -20,6 +20,7 @@ export function BundlesView({
   onChanged: (bundles: BundleInfo[]) => void;
 }): ReactNode {
   const toast = useToast();
+  const [sourcesText, setSourcesText] = useState('');
   const [repo, setRepo] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -35,6 +36,34 @@ export function BundlesView({
       toast.push('Bundle added.', 'good');
       setRepo('');
       setName('');
+    } catch (cause) {
+      toast.push((cause as Error).message, 'bad');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function importSources(): Promise<void> {
+    if (!sourcesText.trim()) return;
+    setBusy('import');
+    try {
+      const result = await api.importBundles(sourcesText);
+      onChanged(result.bundles);
+      const done = [...result.added, ...result.enabled];
+      const skipped = result.skipped.length;
+      if (!done.length && !skipped) {
+        toast.push('Nothing in that list looked like a bundle — no changes made.', 'info');
+      } else if (!done.length) {
+        toast.push(`Nothing imported. ${result.skipped[0]?.reason ?? ''}`.trim(), 'bad');
+      } else {
+        toast.push(
+          `Imported ${done.length} bundle${done.length === 1 ? '' : 's'}${
+            skipped ? ` · ${skipped} line${skipped === 1 ? '' : 's'} skipped` : ''
+          }`,
+          'good',
+        );
+      }
+      if (done.length) setSourcesText('');
     } catch (cause) {
       toast.push((cause as Error).message, 'bad');
     } finally {
@@ -109,21 +138,28 @@ export function BundlesView({
   return (
     <div className="bundles-view">
       <Card className="sources-intro">
-        <h1>Patch bundles</h1>
+        <h1>Your Morphe patches</h1>
         <p>
-          A bundle is a Morphe patch repository: it publishes <code>patches-list.json</code>, which names the exact app
-          versions its patches accept. PatchPilot reads those files directly — including from a <code>.mpp</code> you
-          drop in — so the versions it offers are the ones Morphe will actually patch.
+          PatchPilot only offers patches from the bundles your Morphe has loaded — anything else would suggest apps your
+          patches cannot touch. A bundle publishes <code>patches-list.json</code>, naming the exact versions its patches
+          accept; PatchPilot reads the same file, including from a <code>.mpp</code> you drop in.
         </p>
         <div className="bundle-actions">
           <button type="button" className="ghost-button" onClick={() => void refresh()} disabled={busy !== null}>
             {busy === 'all' ? <Spinner size={12} /> : '↻'} Refresh all
           </button>
           <button type="button" className="ghost-button" onClick={() => void reset()} disabled={busy !== null}>
-            Reset to defaults
+            Reset to known bundles
           </button>
         </div>
       </Card>
+
+      {!bundles.some((bundle) => bundle.enabled) ? (
+        <div className="banner banner-warn">
+          Nothing is loaded yet, so the app catalog is empty. Import the sources your Morphe has, or flip on a bundle
+          below — PatchPilot never assumes.
+        </div>
+      ) : null}
 
       <div className="bundle-list">
         {bundles.map((bundle) => (
@@ -161,7 +197,7 @@ export function BundlesView({
                 <Toggle
                   checked={bundle.enabled}
                   onChange={(next) => void toggle(bundle, next)}
-                  label={`Enable ${bundle.name}`}
+                  label={`Loaded in Morphe: ${bundle.name}`}
                 />
               </div>
             </div>
@@ -196,6 +232,32 @@ export function BundlesView({
       </div>
 
       <div className="bundle-add-grid">
+        <Card>
+          <div className="card-head">
+            <h2>Import from Morphe</h2>
+          </div>
+          <p className="fine-print">
+            Copy the sources from Morphe's patch-source screen — one repository per line, <code>owner/repo</code> or a
+            full GitHub URL. Anything already known is switched on; anything new is fetched. Lines it cannot use are
+            reported, never guessed at.
+          </p>
+          <textarea
+            className="mono-input"
+            rows={4}
+            placeholder={'MorpheApp/morphe-patches\nhxreborn/morphe-patches'}
+            value={sourcesText}
+            onChange={(event) => setSourcesText(event.target.value)}
+          />
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => void importSources()}
+            disabled={busy !== null || !sourcesText.trim()}
+          >
+            {busy === 'import' ? <Spinner size={12} /> : 'Import sources'}
+          </button>
+        </Card>
+
         <Card>
           <div className="card-head">
             <h2>Add a GitHub bundle</h2>

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/logo.svg" alt="PatchPilot" width="96" height="96" />
+</p>
+
 # PatchPilot
 
 [![CI](https://github.com/mob5824m-wq/PatchPilot/actions/workflows/ci.yml/badge.svg)](https://github.com/mob5824m-wq/PatchPilot/actions/workflows/ci.yml)
@@ -79,6 +83,27 @@ src/server/apk/signblock.ts  APK Signing Block v2/v3 → certificate digests
 src/server/apk/verify.ts     container detection, split bundle handling, the five checks
 src/server/apk/fixture.ts    builds genuine fixture APKs (manifest + v2 signature) for tests
 ```
+
+## The mark
+
+A hexagon seal with a compass needle pointing at the upper right — the bundle is the package, the needle is PatchPilot
+picking the one build your patches accept. Sources live in [`brand/`](brand/README.md); the same paths drive the web
+header, the favicon and the Android launcher icon (adaptive, with the Android 13 themed-icon silhouette).
+
+## Only what your Morphe has
+
+PatchPilot offers patches, and therefore apps, **only from the bundles your Morphe has loaded**. Nothing ships switched
+on: a bundle that is not in your Morphe would suggest apps your patches cannot touch, so the catalog starts empty and
+fills from what you tell it.
+
+- **Bundles tab → Import from Morphe**: paste the sources from Morphe's patch-source screen, one per line
+  (`owner/repo` or a full GitHub URL). Known bundles are switched on, new ones are fetched, and anything it cannot use
+  (`https://…/patches.mpp`, a bare file name) is reported rather than half-imported.
+- **Bundles tab → Load a .mpp file**: a bundle Morphe reads from a local file — the same file, the same patch list.
+- **The toggles** are the manual version of the same statement: "this bundle is loaded in my Morphe".
+
+The Catalog API reports the arithmetic (`morphe: { loaded, available }`) so the UI can tell "nothing loaded yet" apart
+from "nothing matches".
 
 ## Doctor
 

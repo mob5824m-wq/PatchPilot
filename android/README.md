@@ -50,7 +50,11 @@ Key pieces:
   catalog does not go stale while the app is open.
 - **Background downloads** — `DownloadService` holds a foreground notification for the duration of a fetch, so a 200 MB
   bundle survives the app going to the background.
+- **Morphe-first catalog** — only the bundles you mark as loaded in Morphe contribute patches, so the app never offers
+  an APK version your patches reject. Paste the sources from Morphe's settings, or load the same `.mpp` it reads.
 - **Doctor** — storage, install permission, notifications, bundle freshness and per-source reachability, on one page.
+- **Launcher icon** — the hexagon seal as an adaptive icon (API 26+), with PNG mipmaps for 7.x and the same vector as
+  the Android 13 monochrome icon. See [`brand/README.md`](../brand/README.md).
 - **Morphe hand-off** — "Open Morphe" after installing, when a known Morphe Manager package is present.
 
 ## Verification, on the phone

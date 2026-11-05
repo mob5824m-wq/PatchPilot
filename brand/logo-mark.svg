@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="PatchPilot">
+  <title>PatchPilot</title>
+  <desc>A hexagon seal with a compass needle pointing to the upper right.</desc>
+  <path d="M16.00 5.97 23.39 11.25 23.39 22.51 16.00 27.79 8.61 22.51 8.61 11.25Z" fill="none" stroke="#6ee7a8" stroke-width="1.95" stroke-linejoin="round"/>
+  <path d="M13.01 18.99L17.15 14.85" stroke="#6ee7a8" stroke-width="1.95" stroke-linecap="round"/>
+  <circle cx="13.01" cy="18.99" r="1.32" fill="#6ee7a8"/>
+  <path d="M19.43 12.57L18.03 16.52L15.48 13.97Z" fill="#6ee7a8" stroke="#6ee7a8" stroke-width="0.85" stroke-linejoin="round"/>
+</svg>

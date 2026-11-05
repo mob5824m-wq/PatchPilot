@@ -10,6 +10,7 @@ import type {
 } from '../shared/types.ts';
 import { verifyApk, type ExpectedApp } from '../shared/verifyMeta.ts';
 import { bundleChecks, libraryChecks, providerChecks, report, settingsChecks } from '../shared/doctor.ts';
+import { importBundleSources } from '../shared/bundleImport.ts';
 import { buildAppDetail, buildCatalog } from '../server/catalog.ts';
 import { request } from '../server/http.ts';
 import type { Provider } from '../server/providers/types.ts';
@@ -118,7 +119,13 @@ export class LocalBackend {
   /* ------------------------------------------------------------- plumbing --- */
 
   private catalog(): CatalogResponse {
-    if (!this.catalogCache) this.catalogCache = buildCatalog(this.options.bundles.payloads());
+    if (!this.catalogCache) {
+      const built = buildCatalog(this.options.bundles.payloads());
+      this.catalogCache = {
+        ...built,
+        morphe: { loaded: built.bundles.length, available: this.options.bundles.infos().length },
+      };
+    }
     return this.catalogCache;
   }
 
@@ -261,6 +268,22 @@ export class LocalBackend {
       const info = await this.options.bundles.addRepo(repo, input.name ? String(input.name) : undefined);
       this.invalidate();
       return this.json(info, 201);
+    }
+
+    if (route === 'POST /api/bundles/import') {
+      // The page posts JSON text, so it is decoded the same way as every other route.
+      const { sources } = textOf(body);
+      const outcome = await importBundleSources(String(sources ?? ''), {
+        configs: () => this.options.bundles.getConfigs(),
+        enable: async (id) => {
+          await this.options.bundles.setEnabled(id, true);
+        },
+        add: async (repo) => {
+          await this.options.bundles.addRepo(repo);
+        },
+      });
+      this.invalidate();
+      return this.json({ ...outcome, bundles: this.options.bundles.infos() });
     }
 
     if (route === 'POST /api/bundles/upload') {

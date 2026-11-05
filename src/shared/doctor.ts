@@ -36,8 +36,8 @@ export function bundleChecks(infos: BundleInfo[], options: { staleDays?: number 
         id: 'bundles',
         label: 'Patch bundles',
         status: 'fail',
-        detail: 'No bundle is enabled, so there is nothing to patch.',
-        hint: 'Enable one in the Bundles tab.',
+        detail: 'No Morphe bundle is loaded, so there is nothing to patch.',
+        hint: 'Import your Morphe sources in the Bundles tab — PatchPilot offers only what your Morphe has.',
       },
     ];
   }
@@ -49,7 +49,7 @@ export function bundleChecks(infos: BundleInfo[], options: { staleDays?: number 
     .reduce((latest, value) => Math.max(latest, value), 0);
   const ageDays = newest ? (Date.now() - newest) / 86_400_000 : Number.POSITIVE_INFINITY;
 
-  const detail = `${enabled.length} enabled · ${enabled.reduce((total, info) => total + info.patchCount, 0)} patches · ${
+  const detail = `${enabled.length} loaded · ${enabled.reduce((total, info) => total + info.patchCount, 0)} patches · ${
     newest ? `${Math.floor(ageDays)} day${Math.floor(ageDays) === 1 ? '' : 's'} old` : 'never fetched'
   }`;
 

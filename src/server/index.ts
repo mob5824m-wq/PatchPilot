@@ -10,6 +10,7 @@ import type {
   Settings,
 } from '../shared/types.ts';
 import { describeApk, verifyApk, type ExpectedApp } from './apk/verify.ts';
+import { importBundleSources } from '../shared/bundleImport.ts';
 import { bundleChecks, libraryChecks, providerChecks, report, settingsChecks } from '../shared/doctor.ts';
 import { buildAppDetail, buildCatalog } from './catalog.ts';
 import {
@@ -43,7 +44,13 @@ const jobs = new JobManager(async () => settings);
 
 let catalogCache: CatalogResponse | null = null;
 function catalog(): CatalogResponse {
-  if (!catalogCache) catalogCache = buildCatalog(registry.getPayloads());
+  if (!catalogCache) {
+    const built = buildCatalog(registry.getPayloads());
+    // `loaded` counts bundles whose patches are in the catalog; `available` is
+    // every bundle PatchPilot knows about, so the UI can tell "turn one on" from
+    // "nothing matches".
+    catalogCache = { ...built, morphe: { loaded: built.bundles.length, available: registry.getInfos().length } };
+  }
   return catalogCache;
 }
 function invalidateCatalog(): void {
@@ -217,6 +224,21 @@ app.post('/api/bundles/:id/refresh', async (request, response) => {
   } catch (error) {
     fail(response, error);
   }
+});
+
+app.post('/api/bundles/import', async (request, response) => {
+  const { sources } = request.body as { sources?: string };
+  const outcome = await importBundleSources(String(sources ?? ''), {
+    configs: () => registry.getConfigs(),
+    enable: async (id) => {
+      await registry.setEnabled(id, true);
+    },
+    add: async (repo) => {
+      await registry.addGithubBundle(repo);
+    },
+  });
+  invalidateCatalog();
+  json(response, { ...outcome, bundles: registry.getInfos() });
 });
 
 app.post('/api/bundles/:id/enabled', async (request, response) => {
