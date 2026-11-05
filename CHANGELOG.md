@@ -2,6 +2,17 @@
 
 Generated from conventional commits by `npm run changelog` — do not edit by hand.
 
+## v0.3.0 — 2026-11-05
+
+### Features
+
+- give PatchPilot a mark, and put it everywhere a logo belongs (e5c075e)
+- offer patches only from the bundles your Morphe has (c8bec21)
+
+### Build and tooling
+
+- **release:** v0.2.0 [skip ci] (c6fc18b)
+
 ## v0.2.0 — 2026-11-05
 
 ### Features
