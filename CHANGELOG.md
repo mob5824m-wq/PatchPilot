@@ -2,6 +2,22 @@
 
 Generated from conventional commits by `npm run changelog` — do not edit by hand.
 
+## v0.4.0 — 2026-11-05
+
+### Breaking changes
+
+- app only, with five reasons to open it (dcba264)
+
+### Features
+
+- app only, with five reasons to open it (dcba264)
+- one folder grant makes reading Morphe work everywhere (9f7b44f)
+- read the bundles Morphe has off the device (d378348)
+
+### Build and tooling
+
+- **release:** v0.3.0 [skip ci] (e0d5acc)
+
 ## v0.3.0 — 2026-11-05
 
 ### Features
