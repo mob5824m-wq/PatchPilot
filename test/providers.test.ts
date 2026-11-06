@@ -15,11 +15,9 @@ const pages = join(here, '..', 'fixtures', 'pages');
 const dataDir = await mkdtemp(join(tmpdir(), 'patchpilot-providers-'));
 process.env.PATCHPILOT_DATA_DIR = dataDir;
 
-const { buildApk, testCertificateSha256 } = await import('../src/server/apk/fixture.ts');
-const { JobManager } = await import('../src/server/jobs.ts');
-const { ensureDirs } = await import('../src/server/config.ts');
-const { ApkMirrorProvider } = await import('../src/server/providers/apkmirror.ts');
-const { ApkPureProvider } = await import('../src/server/providers/apkpure.ts');
+const { buildApk, testCertificateSha256 } = await import('../src/core/apk/fixture.ts');
+const { ApkMirrorProvider } = await import('../src/core/providers/apkmirror.ts');
+const { ApkPureProvider } = await import('../src/core/providers/apkpure.ts');
 const {
   pickDownloadForm,
   pickKeyedDownloadLinks,
@@ -28,15 +26,14 @@ const {
   scoreVariant,
   versionSlugs,
   looksBlocked,
-} = await import('../src/server/providers/apkmirrorParse.ts');
+} = await import('../src/core/providers/apkmirrorParse.ts');
 const {
   directDownloadUrls,
   parseVersionList,
   pickAppPages,
   pickVersionLinks,
-} = await import('../src/server/providers/apkpureParse.ts');
+} = await import('../src/core/providers/apkpureParse.ts');
 
-ensureDirs();
 
 const PACKAGE = 'com.google.android.youtube';
 const VERSION = '21.43.523';
@@ -362,46 +359,7 @@ test('APKPure provider scrapes the versions page when the API is empty', async (
   }
 });
 
-test('a mirror download runs through a job and lands in the library', async () => {
-  const mirror = await startMirror({ apkpureHasUrls: false });
-  try {
-    const provider = new ApkMirrorProvider({ site: mirror.base });
-    const settings: Settings = { providers: {}, preferAbi: null, autoRefreshMinutes: 0, demoSource: false };
-    const manager = new JobManager(async () => settings, [provider]);
 
-    const created = manager.create({
-      packageName: PACKAGE,
-      appName: 'YouTube',
-      version: VERSION,
-      versionCodes: { ARM64_V8A: VERSION_CODE },
-      fileType: 'APK_REQUIRED',
-      signatures: [testCertificateSha256()],
-    });
-
-    const job = await new Promise<import('../src/shared/types.ts').DownloadJob>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('job timed out')), 20_000);
-      const check = () => {
-        const current = manager.get(created.id);
-        if (!current) return false;
-        if (['done', 'failed', 'cancelled'].includes(current.state)) {
-          clearTimeout(timer);
-          resolve(current);
-          return true;
-        }
-        return false;
-      };
-      if (check()) return;
-      manager.on('update', check);
-    });
-
-    assert.equal(job.state, 'done', job.error ?? 'job failed');
-    assert.equal(job.result?.verification.status, 'pass');
-    assert.equal(job.result?.file.packageName, PACKAGE);
-    assert.equal(job.result?.file.versionCode, VERSION_CODE);
-  } finally {
-    await mirror.close();
-  }
-});
 
 test.after(async () => {
   await rm(dataDir, { recursive: true, force: true });

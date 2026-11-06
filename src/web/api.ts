@@ -3,6 +3,7 @@ import type {
   BundleImportResult,
   DoctorReport,
   MorpheScanResponse,
+  UpdateCheck,
   BundleInfo,
   CatalogResponse,
   DownloadJob,
@@ -50,6 +51,16 @@ export const api = {
 
   bundles: () =>
     fetch('/api/bundles').then((response) => parse<{ bundles: BundleInfo[] }>(response)),
+
+  launch: () =>
+    fetch('/api/launch').then((response) => parse<{ target: { tab?: string; packageName?: string } | null }>(response)),
+
+  checkAlerts: () =>
+    fetch('/api/alerts/check', { method: 'POST' }).then((response) =>
+      parse<{ alerts: unknown[]; announced: number }>(response),
+    ),
+
+  update: () => fetch('/api/update').then((response) => parse<UpdateCheck>(response)),
 
   morphe: () => fetch('/api/morphe').then((response) => parse<MorpheScanResponse>(response)),
 

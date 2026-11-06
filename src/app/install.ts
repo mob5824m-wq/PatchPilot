@@ -4,7 +4,7 @@ import hxrebornList from '../../fixtures/bundles/hxreborn.patches-list.json';
 import hxrebornMeta from '../../fixtures/bundles/hxreborn.patches-bundle.json';
 import pikoList from '../../fixtures/bundles/piko.patches-list.json';
 import pikoMeta from '../../fixtures/bundles/piko.patches-bundle.json';
-import { setFetchImplementation, setUserAgent } from '../server/http.ts';
+import { setFetchImplementation, setUserAgent } from '../core/http.ts';
 import { buildUserAgent } from '../shared/userAgent.ts';
 import { abiPreference } from './abi.ts';
 import { LocalBundles, type SeedBundle } from './bundles.ts';
@@ -169,6 +169,17 @@ export async function installStandalone(): Promise<boolean> {
 
   installFetchShim(backend);
 
+  // A share or a store link can arrive while the page is already running.
+  const host = window as unknown as {
+    __patchpilotLaunch?: (target: unknown) => void;
+    __patchpilotPending?: unknown;
+  };
+  host.__patchpilotLaunch = (target) => {
+    // Kept as well as dispatched: a push can land before React mounts its listener.
+    host.__patchpilotPending = target;
+    window.dispatchEvent(new CustomEvent('patchpilot:launch', { detail: target }));
+  };
+
   // On a fresh install nothing is loaded, and the answer is on this device:
   // ask Android what of Morphe it can see before the user ever sees an empty
   // catalogue. It costs one scan per launch and stays silent when the answer is
@@ -176,6 +187,12 @@ export async function installStandalone(): Promise<boolean> {
   window.setTimeout(() => {
     void backend.handle('POST', '/api/morphe/scan', new URLSearchParams(), null).catch(() => undefined);
   }, 300);
+
+  // Once the catalogue is warm: anything you already saved that a bundle now
+  // supports gets one notification, and only once.
+  window.setTimeout(() => {
+    void backend.handle('POST', '/api/alerts/check', new URLSearchParams(), null).catch(() => undefined);
+  }, 20_000);
   installEventSourceShim(backend);
   installDownloadLinkGuard(native);
 

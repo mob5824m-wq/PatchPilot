@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseBundleSource, parseBundleSources } from '../src/shared/bundleSource.ts';
 import { importBundleSources, type ImportableBundle } from '../src/shared/bundleImport.ts';
-import { buildCatalog } from '../src/server/catalog.ts';
+import { buildCatalog } from '../src/core/catalog.ts';
 import { defaultBundles } from '../src/shared/defaults.ts';
-import type { Patch } from '../src/server/bundles/types.ts';
+import type { Patch } from '../src/core/bundles/types.ts';
 
 function patch(bundleId: string, packageName: string, versions: string[]): Patch {
   return {

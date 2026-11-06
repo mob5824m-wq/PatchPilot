@@ -210,6 +210,16 @@ export class Native {
     return this.bridge.call('device.state', {}) as Promise<DeviceState>;
   }
 
+  /** What opened the app: a shared store link, or a launcher shortcut. */
+  async launchTarget(): Promise<{ tab?: string; packageName?: string } | null> {
+    return this.bridge.call('app.launchTarget', {}) as Promise<{ tab?: string; packageName?: string } | null>;
+  }
+
+  /** A one-off system notification; ignored when the user has notifications off. */
+  async notify(title: string, body: string): Promise<boolean> {
+    return this.bridge.call('ui.notify', { title, body }) as Promise<boolean>;
+  }
+
   /** Asks the shell what of Morphe Manager it can see on this device. */
   async scanMorphe(): Promise<MorpheScan> {
     return this.bridge.call('morphe.scan', {}) as Promise<MorpheScan>;

@@ -185,21 +185,6 @@ export function SourcesView({
           </select>
         </label>
 
-        <div className="setting-row">
-          <div>
-            <div className="setting-title">Offline demo fixture source</div>
-            <div className="fine-print">
-              Generates a stand-in APK with the requested package and version, signed with PatchPilot's test key. Useful
-              for trying the flow with no network; never a real app.
-            </div>
-          </div>
-          <Toggle
-            checked={Boolean(settings?.demoSource)}
-            onChange={(next) => void saveSettings({ demoSource: next })}
-            label="Toggle offline demo source"
-          />
-        </div>
-
         <label className="field">
           <span>Refresh bundles automatically every</span>
           <select

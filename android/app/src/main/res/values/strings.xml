@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PatchPilot</string>
+
+    <!-- Launcher shortcuts (long-press the icon). -->
+    <string name="shortcut_library">Library</string>
+    <string name="shortcut_library_long">Verified APKs on this device</string>
+    <string name="shortcut_bundles">Bundles</string>
+    <string name="shortcut_bundles_long">Patches loaded from Morphe</string>
+    <string name="shortcut_doctor">Doctor</string>
+    <string name="shortcut_doctor_long">Check sources, storage and bundles</string>
 </resources>

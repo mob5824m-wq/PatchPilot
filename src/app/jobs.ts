@@ -6,7 +6,7 @@ import type {
   Settings,
 } from '../shared/types.ts';
 import { verifyApk, type ExpectedApp } from '../shared/verifyMeta.ts';
-import type { CandidateFile, CandidatePage, Provider } from '../server/providers/types.ts';
+import type { CandidateFile, CandidatePage, Provider } from '../core/providers/types.ts';
 import { toApkFileInfo, type LocalLibrary } from './library.ts';
 import type { Native } from './native.ts';
 import { activeAppProviders } from './providers.ts';

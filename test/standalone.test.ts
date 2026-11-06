@@ -21,7 +21,7 @@ import {
 } from '../src/app/native.ts';
 import { makeProxyFetch } from '../src/app/proxyFetch.ts';
 import { defaultAppSettings, LocalBackend } from '../src/app/router.ts';
-import { setFetchImplementation } from '../src/server/http.ts';
+import { setFetchImplementation } from '../src/core/http.ts';
 import { importBundleSources } from '../src/shared/bundleImport.ts';
 import type { Settings } from '../src/shared/types.ts';
 
@@ -48,6 +48,8 @@ const SIGNATURE = '5aad2bee6db95d17e05a08d7d1e64c10a1511879154483916b6ae6c7fd9cb
 interface ShellOptions {
   /** Overrides what PackageManager "finds" in a downloaded file. */
   observed?: Partial<NativeApkInfo>;
+  /** What launched the app: a shared store link, or a launcher shortcut. */
+  launchTarget?: { tab?: string; packageName?: string } | null;
 }
 
 interface Shell {
@@ -57,6 +59,10 @@ interface Shell {
   requests: string[];
   downloaded: string[];
   installed: string[];
+  /** Every notification the backend asked the shell to post. */
+  notifications: { title: string; body: string }[];
+  /** Simulates a second launch arriving while the page is already open. */
+  pushLaunch: (target: { tab?: string; packageName?: string }) => void;
   close: () => Promise<void>;
 }
 
@@ -149,6 +155,8 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
   const requests: string[] = [];
   const downloaded: string[] = [];
   const installed: string[] = [];
+  const notifications: { title: string; body: string }[] = [];
+  let launchTarget = options.launchTarget ?? null;
   let folderGranted = false;
   let counter = 0;
 
@@ -278,6 +286,17 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
             ),
           };
 
+        case 'app.launchTarget': {
+          // Read once: the shell clears it so a reload does not jump twice.
+          const target = launchTarget;
+          launchTarget = null;
+          return target;
+        }
+
+        case 'ui.notify':
+          notifications.push({ title: String(input.title), body: String(input.body) });
+          return true;
+
         case 'app.openMorphe':
           return { package: 'app.morphe.manager' };
 
@@ -309,6 +328,10 @@ function createShell(base: string, options: ShellOptions = {}): Shell {
     requests,
     downloaded,
     installed,
+    notifications,
+    pushLaunch: (target) => {
+      launchTarget = target;
+    },
     close: async () => undefined,
   };
 }
@@ -732,6 +755,128 @@ test('bundles refresh from GitHub and fall back to the snapshot when the network
   );
 
   await harness.close();
+});
+
+test('a store link or a launcher shortcut opens the app where it matters', async () => {
+  const harness = await startHarness({ launchTarget: { packageName: PACKAGE } });
+
+  const first = (await harness.backend.handle('GET', '/api/launch', new URLSearchParams(), null)).body as {
+    target: { tab?: string; packageName?: string } | null;
+  };
+  assert.deepEqual(first.target, { packageName: PACKAGE });
+
+  // Read once: a reload must not drag the user back to the same app.
+  const second = (await harness.backend.handle('GET', '/api/launch', new URLSearchParams(), null)).body as {
+    target: unknown;
+  };
+  assert.equal(second.target, null);
+
+  // A second share while the app is already open is queued for the page.
+  harness.shell.pushLaunch({ tab: 'doctor' });
+  const third = (await harness.backend.handle('GET', '/api/launch', new URLSearchParams(), null)).body as {
+    target: { tab?: string } | null;
+  };
+  assert.deepEqual(third.target, { tab: 'doctor' });
+
+  await harness.close();
+});
+
+test('you are told once when something you saved becomes patchable', async () => {
+  const harness = await startHarness();
+
+  // The user saved an older YouTube build; the loaded bundle now accepts 21.43.523.
+  const saved = {
+    id: 'saved-youtube',
+    fileName: `${PACKAGE}_21.30.216.apk`,
+    sizeBytes: 4096,
+    createdAt: new Date().toISOString(),
+    packageName: PACKAGE,
+    appName: 'YouTube',
+    versionName: '21.30.216',
+    versionCode: 1830000,
+    container: 'apk',
+    sha256: null,
+    signerSha256: [SIGNATURE],
+    verificationStatus: 'verified',
+    providerId: 'apkmirror',
+    sourceUrl: null,
+    demo: false,
+    notes: null,
+  };
+  Object.assign(harness.library, { list: async () => [saved] });
+
+  const first = (await harness.backend.handle('POST', '/api/alerts/check', new URLSearchParams(), null)).body as {
+    announced: number;
+    alerts: { packageName: string; currentVersion: string; supportedVersion: string }[];
+  };
+  assert.equal(first.announced, 1);
+  assert.equal(first.alerts.length, 1);
+  assert.equal(first.alerts[0]?.currentVersion, '21.30.216');
+  assert.equal(first.alerts[0]?.supportedVersion, '21.43.523');
+
+  assert.equal(harness.shell.notifications.length, 1, 'exactly one notification');
+  assert.equal(harness.shell.notifications[0]?.title, 'YouTube 21.43.523 is patchable');
+  assert.match(harness.shell.notifications[0]?.body ?? '', /You saved 21\.30\.216/);
+
+  // Launching again does not nag about the same app and version.
+  const again = (await harness.backend.handle('POST', '/api/alerts/check', new URLSearchParams(), null)).body as {
+    announced: number;
+    alerts: unknown[];
+  };
+  assert.equal(again.announced, 0);
+  assert.equal(again.alerts.length, 1, 'still reported, just not re-announced');
+  assert.equal(harness.shell.notifications.length, 1);
+
+  await harness.close();
+});
+
+test('the app can tell you a newer release is out, and is honest when it cannot', async () => {
+  const harness = await startHarness();
+  const proxy = makeProxyFetch(harness.shell.native, fetch as unknown as typeof globalThis.fetch) as unknown as typeof fetch;
+
+  const answer = (body: unknown, status = 200): typeof fetch =>
+    (async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch;
+
+  try {
+    setFetchImplementation(
+      answer({ tag_name: 'v9.9.9', html_url: 'https://github.com/mob5824m-wq/PatchPilot/releases/tag/v9.9.9' }),
+    );
+    const check = (await harness.backend.handle('GET', '/api/update', new URLSearchParams(), null)).body as {
+      current: string;
+      latest: string | null;
+      url: string | null;
+      newer: boolean;
+      error: string | null;
+    };
+    assert.equal(check.current, '1.2.3');
+    assert.equal(check.latest, '9.9.9');
+    assert.equal(check.newer, true);
+    assert.equal(check.error, null);
+    assert.match(check.url ?? '', /releases\/tag\/v9\.9\.9/);
+
+    // An older release is not an update, and nothing is offered to download.
+    setFetchImplementation(answer({ tag_name: 'v1.0.0', html_url: 'https://example.invalid' }));
+    const older = (await harness.backend.handle('GET', '/api/update', new URLSearchParams(), null)).body as {
+      newer: boolean;
+      latest: string | null;
+    };
+    assert.equal(older.newer, false);
+    assert.equal(older.latest, '1.0.0');
+
+    // GitHub refusing the request is reported as such — no invented version.
+    setFetchImplementation(answer({ message: 'rate limited' }, 403));
+    const refused = (await harness.backend.handle('GET', '/api/update', new URLSearchParams(), null)).body as {
+      newer: boolean;
+      latest: string | null;
+      error: string | null;
+    };
+    assert.equal(refused.newer, false);
+    assert.equal(refused.latest, null);
+    assert.match(refused.error ?? '', /403/);
+  } finally {
+    setFetchImplementation(proxy);
+    await harness.close();
+  }
 });
 
 test('a .mpp archive is read in the browser zip reader', async () => {

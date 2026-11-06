@@ -6,6 +6,7 @@ import type {
   DownloadJob,
   MorpheDiscovery,
   MorpheScanResponse,
+  UpdateCheck,
   HealthResponse,
   ResolveCandidate,
   Settings,
@@ -13,10 +14,12 @@ import type {
 import { verifyApk, type ExpectedApp } from '../shared/verifyMeta.ts';
 import { bundleChecks, libraryChecks, morpheCheck, providerChecks, report, settingsChecks } from '../shared/doctor.ts';
 import { importBundleSources } from '../shared/bundleImport.ts';
+import { alertKey, alertMessage, findUpgradeAlerts, newAlerts } from './alerts.ts';
 import { discoverMorphe, summariseDiscovery } from './morpheScan.ts';
-import { buildAppDetail, buildCatalog } from '../server/catalog.ts';
-import { request } from '../server/http.ts';
-import type { Provider } from '../server/providers/types.ts';
+import { buildAppDetail, buildCatalog } from '../core/catalog.ts';
+import { compareVersions } from '../core/versions.ts';
+import { request } from '../core/http.ts';
+import type { Provider } from '../core/providers/types.ts';
 import { buildUserAgent, PROJECT_URL } from '../shared/userAgent.ts';
 import type { LocalBundles } from './bundles.ts';
 import type { LocalJobs } from './jobs.ts';
@@ -132,6 +135,35 @@ export class LocalBackend {
     return this.catalogCache;
   }
 
+  /**
+   * The newest published release, compared with the version this APK was built
+   * as. Every phone that does not have Play's update machinery needs this.
+   */
+  private async checkForUpdate(): Promise<UpdateCheck> {
+    const current = this.options.version;
+    const base: UpdateCheck = { current, latest: null, url: null, newer: false, error: null };
+    try {
+      const response = await request('https://api.github.com/repos/mob5824m-wq/PatchPilot/releases/latest', {
+        headers: { accept: 'application/vnd.github+json' },
+        timeoutMs: 8000,
+      });
+      if (!response.ok) return { ...base, error: `GitHub answered ${response.status}` };
+
+      const release = (await response.json()) as { tag_name?: string; html_url?: string };
+      const latest = (release.tag_name ?? '').replace(/^v/, '') || null;
+      if (!latest) return { ...base, error: 'The release has no tag' };
+      return {
+        current,
+        latest,
+        url: release.html_url ?? null,
+        newer: compareVersions(latest, current) > 0,
+        error: null,
+      };
+    } catch (cause) {
+      return { ...base, error: (cause as Error).message };
+    }
+  }
+
   /** One read of Morphe, applied to the bundles and remembered in settings. */
   private async discoverMorphe(): Promise<MorpheDiscovery> {
     const discovery = await discoverMorphe(
@@ -191,7 +223,6 @@ export class LocalBackend {
         ok: true,
         version: this.options.version,
         commit: null,
-        demoSource: false,
         dataDir: 'Downloads/PatchPilot',
         libraryDir: 'Downloads/PatchPilot',
         node: `Android SDK ${this.options.native.device.sdk}`,
@@ -297,6 +328,32 @@ export class LocalBackend {
       const info = await this.options.bundles.addRepo(repo, input.name ? String(input.name) : undefined);
       this.invalidate();
       return this.json(info, 201);
+    }
+
+    if (route === 'GET /api/launch') {
+      // A shared store link or a launcher shortcut, read once and then cleared.
+      return this.json({ target: await this.options.native.launchTarget() });
+    }
+
+    if (route === 'POST /api/alerts/check') {
+      // "Something you already have can be updated to a version your patches
+      // accept" — announced once per app and version, never twice.
+      const alerts = findUpgradeAlerts(await this.options.library.list(), this.catalog().apps);
+      const told = this.settings.announcedAlerts ?? [];
+      const fresh = newAlerts(alerts, told);
+      for (const alert of fresh) {
+        const message = alertMessage(alert);
+        await this.options.native.notify(message.title, message.body).catch(() => false);
+      }
+      if (fresh.length) {
+        this.settings = { ...this.settings, announcedAlerts: [...told, ...fresh.map(alertKey)] };
+        await this.options.saveSettings(this.settings);
+      }
+      return this.json({ alerts, announced: fresh.length });
+    }
+
+    if (route === 'GET /api/update') {
+      return this.json(await this.checkForUpdate());
     }
 
     if (route === 'GET /api/morphe') {

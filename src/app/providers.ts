@@ -1,10 +1,10 @@
 import type { ProviderInfo, Settings } from '../shared/types.ts';
-import { ApkMirrorProvider } from '../server/providers/apkmirror.ts';
-import { ApkPureProvider } from '../server/providers/apkpure.ts';
-import { FdroidProvider } from '../server/providers/fdroid.ts';
-import { GithubReleasesProvider } from '../server/providers/github.ts';
-import { MorpheApiProvider } from '../server/providers/morpheApi.ts';
-import type { Provider } from '../server/providers/types.ts';
+import { ApkMirrorProvider } from '../core/providers/apkmirror.ts';
+import { ApkPureProvider } from '../core/providers/apkpure.ts';
+import { FdroidProvider } from '../core/providers/fdroid.ts';
+import { GithubReleasesProvider } from '../core/providers/github.ts';
+import { MorpheApiProvider } from '../core/providers/morpheApi.ts';
+import type { Provider } from '../core/providers/types.ts';
 
 /**
  * The sources the phone can use.

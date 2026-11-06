@@ -117,6 +117,15 @@ export interface MorpheDiscovery {
   found: boolean;
 }
 
+/** Answer of `GET /api/update`: the newest published release against this build. */
+export interface UpdateCheck {
+  current: string;
+  latest: string | null;
+  url: string | null;
+  newer: boolean;
+  error: string | null;
+}
+
 /** Answer of `POST /api/morphe/scan`: whether the platform allows it, and what came back. */
 export interface MorpheScanResponse {
   supported: boolean;
@@ -270,9 +279,10 @@ export interface Settings {
   /** Ask mirrors to serve the ABI-specific build when the bundle pins version codes. */
   preferAbi: string | null;
   autoRefreshMinutes: number;
-  demoSource: boolean;
   /** Only the phone can read Morphe, so this is absent in server mode. */
   morpheScan?: MorpheDiscovery | null;
+  /** `<package>@<version>` keys already announced, so nothing nags twice. */
+  announcedAlerts?: string[];
 }
 
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip';
@@ -298,7 +308,6 @@ export interface HealthResponse {
   version: string;
   /** Short commit SHA when the server knows which build it is. */
   commit?: string | null;
-  demoSource: boolean;
   dataDir: string;
   libraryDir: string;
   node: string;

@@ -7,8 +7,8 @@ import type {
   MorpheDiscovery,
   Settings,
 } from './types.ts';
-import { request } from '../server/http.ts';
-import type { Provider } from '../server/providers/types.ts';
+import { request } from '../core/http.ts';
+import type { Provider } from '../core/providers/types.ts';
 
 /**
  * The checks behind the Doctor screen: everything that can make a download fail

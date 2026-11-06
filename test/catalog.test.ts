@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { BundleInfo } from '../src/shared/types.ts';
-import { parsePatchList } from '../src/server/bundles/parse.ts';
-import { buildAppDetail, buildCatalog } from '../src/server/catalog.ts';
+import { parsePatchList } from '../src/core/bundles/parse.ts';
+import { buildAppDetail, buildCatalog } from '../src/core/catalog.ts';
 
 function bundleInfo(id: string, name = id): BundleInfo {
   return {

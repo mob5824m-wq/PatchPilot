@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseBundleInfo, parsePatchList } from '../src/server/bundles/parse.ts';
+import { parseBundleInfo, parsePatchList } from '../src/core/bundles/parse.ts';
 
 const modernBundle = {
   NOTE: 'generated',

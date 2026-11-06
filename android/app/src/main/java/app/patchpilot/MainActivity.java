@@ -53,6 +53,7 @@ public class MainActivity extends Activity {
 
         shell = new NativeShell(this, webView);
         webView.addJavascriptInterface(shell, "PatchPilotNative");
+        shell.setLaunchTarget(LaunchTarget.from(getIntent()));
 
         setContentView(webView, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -168,6 +169,23 @@ public class MainActivity extends Activity {
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
         } catch (ActivityNotFoundException error) {
             Toast.makeText(this, "No app can open that link", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * A share or a store link while the app is already open. The target is kept
+     * for the next page load and pushed into the running page immediately.
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        org.json.JSONObject target = LaunchTarget.from(intent);
+        if (target == null) return;
+        shell.setLaunchTarget(target);
+        if (webView != null) {
+            webView.evaluateJavascript(
+                    "window.__patchpilotLaunch && window.__patchpilotLaunch(" + target + ")", null);
         }
     }
 

@@ -2,29 +2,26 @@
   "name": "patchpilot",
   "version": "0.3.0",
   "private": true,
-  "description": "Finds the exact APK version a Morphe patch bundle needs, downloads it, and verifies it before you patch.",
+  "description": "Android app that finds and verifies the exact APK a Morphe patch bundle needs.",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.19"
   },
   "scripts": {
-    "dev": "tsx src/server/index.ts --dev",
-    "start": "npm run build && tsx src/server/index.ts",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts test/*.test.tsx",
-    "cli": "tsx src/server/cli.ts",
-    "fixtures": "tsx src/server/apk/fixture.ts",
+    "fixtures": "tsx src/core/apk/fixture.ts",
     "version:next": "tsx scripts/next-version.ts",
     "release:notes": "tsx scripts/next-version.ts --notes-out release-notes.md",
-    "android": "cd android && gradle assembleDebug",
+    "android": "npm run build && cd android && gradle assembleDebug",
+    "android:release": "npm run build && cd android && gradle assembleRelease",
     "check:java": "node scripts/check-java.mjs",
     "changelog": "tsx scripts/changelog.ts",
     "changelog:check": "tsx scripts/changelog.ts --check"
   },
   "dependencies": {
-    "express": "^5.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compareVersions, looksExperimental, sortVersionsDescending } from '../src/server/versions.ts';
+import { compareVersions, looksExperimental, sortVersionsDescending } from '../src/core/versions.ts';
 
 test('compares numeric segments numerically, not lexically', () => {
   assert.ok(compareVersions('21.10.1', '21.9.4') > 0);

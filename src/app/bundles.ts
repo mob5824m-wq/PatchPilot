@@ -1,9 +1,9 @@
 import { cloneDefaultBundles } from '../shared/defaults.ts';
 import type { BundleConfig, BundleInfo } from '../shared/types.ts';
-import type { BundlePayload } from '../server/catalog.ts';
-import { parseBundleInfo, parsePatchList } from '../server/bundles/parse.ts';
-import type { Patch } from '../server/bundles/types.ts';
-import { request } from '../server/http.ts';
+import type { BundlePayload } from '../core/catalog.ts';
+import { parseBundleInfo, parsePatchList } from '../core/bundles/parse.ts';
+import type { Patch } from '../core/bundles/types.ts';
+import { request } from '../core/http.ts';
 import { extractFromBundleArchive } from './mpp.ts';
 import { fromBase64, type Native } from './native.ts';
 

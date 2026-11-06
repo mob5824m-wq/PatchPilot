@@ -58,6 +58,12 @@ public class NativeShell {
     /** Set while the system folder picker is open, so its result can answer the call. */
     private volatile String pendingFolderId;
 
+    /** What the launch intent asked for, until the page picks it up. */
+    private JSONObject launchTarget;
+
+    /** Channel for the "a newer version is supported now" notices. */
+    static final String ALERTS_CHANNEL = "patchpilot-alerts";
+
     @JavascriptInterface
     public void call(final String id, final String action, final String payloadJson) {
         // The folder picker answers out of onActivityResult, not out of dispatch().
@@ -123,6 +129,16 @@ public class NativeShell {
                 install(payload.getString("handle"));
                 return true;
 
+            case "app.launchTarget": {
+                JSONObject target = launchTarget;
+                launchTarget = null;
+                return target;
+            }
+
+            case "ui.notify":
+                notifyUser(payload.optString("title", "PatchPilot"), payload.optString("body", ""));
+                return true;
+
             case "app.openMorphe":
                 return openMorphe();
 
@@ -164,6 +180,55 @@ public class NativeShell {
 
             default:
                 throw new IllegalArgumentException("Unknown action: " + action);
+        }
+    }
+
+    /** Called by the activity for the intent that started (or resumed) the app. */
+    public void setLaunchTarget(JSONObject target) {
+        this.launchTarget = target;
+    }
+
+    /**
+     * A one-off notice — a newer version of an app you keep is now patchable.
+     * Android 13 needs POST_NOTIFICATIONS; without it this is quietly skipped,
+     * because the same news is also on the Doctor screen.
+     */
+    private void notifyUser(String title, String body) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            try {
+                activity.requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, 1003);
+            } catch (RuntimeException ignored) {
+                // Nothing to do; the alert is also shown in the app.
+            }
+            return;
+        }
+
+        android.app.NotificationManager manager =
+                (android.app.NotificationManager) activity.getSystemService(Activity.NOTIFICATION_SERVICE);
+        if (manager == null) return;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.app.NotificationChannel channel = new android.app.NotificationChannel(
+                    ALERTS_CHANNEL, "Patch availability", android.app.NotificationManager.IMPORTANCE_DEFAULT);
+            channel.setDescription("A newer version of an app in your library is now supported by your patches.");
+            manager.createNotificationChannel(channel);
+        }
+
+        android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new android.app.Notification.Builder(activity, ALERTS_CHANNEL)
+                : new android.app.Notification.Builder(activity);
+        builder.setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(new android.app.Notification.BigTextStyle().bigText(body))
+                .setAutoCancel(true);
+
+        try {
+            manager.notify((int) (System.currentTimeMillis() % 100000), builder.build());
+        } catch (RuntimeException ignored) {
+            // Posting is best-effort; the Doctor screen carries the same news.
         }
     }
 
