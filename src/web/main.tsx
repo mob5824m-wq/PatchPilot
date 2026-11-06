@@ -8,18 +8,23 @@ const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root');
 
 /**
- * Inside the Android app the API has no server behind it: `installStandalone`
- * wires the in-page backend before the first render, so every `/api/...` call
- * the UI makes is answered on the device. On a desktop it returns immediately
- * and the app talks to Node as usual.
+ * PatchPilot has no server: the UI is bundled into the APK and every `/api/...`
+ * call is answered on the device by `installStandalone`. Outside the Android
+ * shell there is nothing to talk to, so say so instead of failing obscurely.
  */
 async function bootstrap(): Promise<void> {
-  try {
-    await installStandalone();
-  } catch (error) {
-    // A broken shell must not leave a blank screen; the UI's own error state
-    // will explain that the server cannot be reached.
+  const installed = await installStandalone().catch((error: unknown) => {
     console.error('Standalone setup failed', error);
+    return false;
+  });
+
+  if (!installed) {
+    container!.innerHTML =
+      '<div style="font:14px/1.6 system-ui;padding:32px;color:#e7eef7;background:#080b10;height:100vh">' +
+      '<h1 style="font-size:18px;margin:0 0 8px">PatchPilot runs on Android</h1>' +
+      '<p style="color:#93a3b8;margin:0">Install the APK from the releases page — this page has no server behind it.</p>' +
+      '</div>';
+    return;
   }
 
   createRoot(container as HTMLElement).render(

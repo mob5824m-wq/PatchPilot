@@ -1,6 +1,14 @@
-import type { BundleInfo, CheckStatus, DoctorCheck, DoctorReport, LibraryEntry, Settings } from './types.ts';
-import { request } from '../server/http.ts';
-import type { Provider } from '../server/providers/types.ts';
+import type {
+  BundleInfo,
+  CheckStatus,
+  DoctorCheck,
+  DoctorReport,
+  LibraryEntry,
+  MorpheDiscovery,
+  Settings,
+} from './types.ts';
+import { request } from '../core/http.ts';
+import type { Provider } from '../core/providers/types.ts';
 
 /**
  * The checks behind the Doctor screen: everything that can make a download fail
@@ -24,6 +32,55 @@ export function worst(checks: DoctorCheck[]): CheckStatus {
   if (checks.some((check) => check.status === 'warn')) return 'warn';
   if (checks.some((check) => check.status === 'pass')) return 'pass';
   return 'skip';
+}
+
+/**
+ * Morphe: whether PatchPilot has read the app's sources yet, and what that read
+ * achieved. Android hides another app's files, so "not found" is a fact to
+ * report rather than a failure to work around.
+ */
+export function morpheCheck(discovery: MorpheDiscovery | null | undefined): DoctorCheck {
+  if (!discovery) {
+    return {
+      id: 'morphe',
+      label: 'Morphe Manager',
+      status: 'warn',
+      detail: 'Not read yet — the catalogue starts empty until PatchPilot knows which bundles your Morphe has.',
+      hint: 'Bundles tab → Read from Morphe, or paste your sources.',
+    };
+  }
+
+  const names = discovery.installed.map((entry) => entry.package).join(', ');
+  if (!discovery.installed.length) {
+    return {
+      id: 'morphe',
+      label: 'Morphe Manager',
+      status: 'skip',
+      detail: 'Not installed on this device, so there is nothing to read.',
+      hint: 'Add the bundle repositories by hand in the Bundles tab.',
+    };
+  }
+
+  if (discovery.found) {
+    const parts: string[] = [];
+    if (discovery.added.length) parts.push(`${discovery.added.length} added`);
+    if (discovery.enabled.length) parts.push(`${discovery.enabled.length} switched on`);
+    return {
+      id: 'morphe',
+      label: 'Morphe Manager',
+      status: 'pass',
+      detail: `Read ${discovery.filesRead} file${discovery.filesRead === 1 ? '' : 's'} from ${names}${parts.length ? ` — ${parts.join(', ')}` : ''}.`,
+      hint: null,
+    };
+  }
+
+  return {
+    id: 'morphe',
+    label: 'Morphe Manager',
+    status: 'warn',
+    detail: `${names} is installed, but Android keeps its source list private to it.`,
+    hint: 'Paste the sources once in the Bundles tab — PatchPilot keeps them.',
+  };
 }
 
 /** Bundles: loaded at all, current enough, and not sitting on an error. */

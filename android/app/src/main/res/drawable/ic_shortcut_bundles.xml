@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stacked layers: the patch bundles. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2 22,7 12,12 2,7z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.75"
+        android:pathData="M2,11.2 12,16.2 22,11.2 22,13.8 12,18.8 2,13.8z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.5"
+        android:pathData="M2,16.4 12,21.4 22,16.4 22,19 12,24 2,19z" />
+</vector>

@@ -6,10 +6,11 @@ patch needs on APKPure or APKMirror, downloads it, verifies it on the device, an
 
 Every release attaches an installable APK (`patchpilot-android-<version>.apk`).
 
-## How a standalone app reuses a server codebase
+## How the app is put together
 
-The UI was written as a React client of PatchPilot's JSON API. Rather than rewrite it in Android views, the app keeps
-the UI **and the backend logic**, and replaces only the layer underneath:
+Android views would mean writing the catalogue browser, the job log and the library twice. Instead the app keeps the
+React UI **and the backend logic**, and replaces only the layer underneath — the UI speaks the same `/api/...` calls it
+always did, and they are answered inside the page:
 
 ```
 React UI (src/web)                     unchanged, still calls /api/...
@@ -24,9 +25,9 @@ NativeShell.java                       the only platform-specific code
 APKPure / APKMirror                 Downloads/PatchPilot
 ```
 
-That means the mirror scrapers, the bundle parsers and the verification rules are *the same code* the desktop build
-runs — and the same tests cover them (`test/providers.test.ts`, `test/standalone.test.ts`). Nothing is reimplemented in
-Java except what only Android can do.
+That means the mirror scrapers, the bundle parsers and the verification rules are plain TypeScript with no server behind
+them, covered by `test/providers.test.ts` and `test/standalone.test.ts`. Nothing is reimplemented in Java except what
+only Android can do.
 
 Key pieces:
 
@@ -50,22 +51,37 @@ Key pieces:
   catalog does not go stale while the app is open.
 - **Background downloads** — `DownloadService` holds a foreground notification for the duration of a fetch, so a 200 MB
   bundle survives the app going to the background.
-- **Morphe-first catalog** — only the bundles you mark as loaded in Morphe contribute patches, so the app never offers
-  an APK version your patches reject. Paste the sources from Morphe's settings, or load the same `.mpp` it reads.
+- **Morphe-first catalog** — only the bundles your Morphe has loaded contribute patches, so the app never offers an APK
+  version your patches reject.
+- **Reading Morphe** — `MorpheScanner.java` probes `app.morphe.manager` on every launch: the install, any
+  `.mpp` / `patches-list.json` in a shared folder or a folder you granted, and its private preferences on a rooted
+  device. Findings become bundles automatically; when nothing is readable the app says so and leaves the manual import
+  as the way in.
+- **The folder grant** — one tap on "Give it a folder" (`ACTION_OPEN_DOCUMENT_TREE`), kept with
+  `takePersistableUriPermission`, read through `DocumentsContract` on every launch. No storage permission, no
+  all-files access, and it survives restarts.
 - **Doctor** — storage, install permission, notifications, bundle freshness and per-source reachability, on one page.
 - **Launcher icon** — the hexagon seal as an adaptive icon (API 26+), with PNG mipmaps for 7.x and the same vector as
   the Android 13 monochrome icon. See [`brand/README.md`](../brand/README.md).
 - **Morphe hand-off** — "Open Morphe" after installing, when a known Morphe Manager package is present.
+- **Launch targets** — `LaunchTarget.java` reads `market://details?id=…`, `play.google.com/store/apps/details?id=…`,
+  `patchpilot://{library,bundles,doctor}[?package=…]` and shared `text/plain`; the target is handed to the page through
+  `window.__patchpilotLaunch(...)` (or `app.launchTarget` on the next load) and read exactly once.
+- **Notifications** — the `patchpilot-alerts` channel for "this saved APK is patchable now" and "a newer PatchPilot is
+  out", and the `POST_NOTIFICATIONS` request on Android 13+. `ui.notify` is a no-op when the user has notifications off.
+- **Queue** — downloads are sequenced by the page (`src/web/queue.ts`), so a batch keeps running while you browse.
 
 ## Verification, on the phone
 
-The desktop build decodes the binary manifest and the APK Signing Block itself. Android already does both properly, so
+The archive readers in `src/core/apk/` decode the binary manifest and the APK Signing Block in TypeScript, for the
+things Android will not report (file type, split contents, a file you already have). For a fresh download Android
+already does both properly, so
 `ApkInspector` asks `PackageManager` for the package name, version name, version code and the SHA-256 of every signing
 certificate — the exact digests the patch bundles pin. Split bundles (`.apkm`, `.xapk`, `.apks`) are opened as zips and
 their base APK is inspected the same way.
 
-The comparison against the bundle (`src/shared/verifyMeta.ts`) is shared with the server, so the same file is accepted
-or rejected for the same reasons on both platforms. A rejected download is deleted, never published.
+The comparison against the bundle (`src/shared/verifyMeta.ts`) is the same code the tests drive, so a file is accepted
+or rejected for reasons you can read in the job log. A rejected download is deleted, never published.
 
 ## Build
 
@@ -119,8 +135,30 @@ No cleartext traffic: all requests go through `HttpBridge`, and the WebView only
 
 - **Split bundles** are verified through their base APK *and* their split list: `base.apk` is required, and a missing
   split for the device's ABI is a warning. Density and language splits are not checked.
-- **No GitHub token**: authenticated GitHub requests are a desktop feature; the app uses the anonymous rate limit.
+- **No GitHub token**: the app uses the anonymous rate limit (60 requests/hour per IP).
 - The app cannot be built or run in a CI container without an Android SDK; `test/standalone.test.ts` exercises the
   standalone backend against a fake shell so the logic is covered regardless.
 - `npm run check:java` parses every Java file with a real Java parser, so syntax errors fail in a second instead of
   after a Gradle build. It is a parser, not a compiler: types and API levels are still Gradle's job.
+
+## Reading Morphe Manager
+
+Morphe's package is `app.morphe.manager`. Its sources and cached bundles live in its private data directory, which
+Android closes to every other app — `listFiles()` returns null, not an empty list. `MorpheScanner` therefore reports
+three things rather than pretending:
+
+1. **Installed** — via `PackageManager`, always available (name and version).
+2. **Readable files** — `.mpp`, `patches-list.json` and Flutter's `shared_prefs`, looked for in
+   `Android/data/<pkg>/files`, `Android/media/<pkg>`, `Download/Morphe`, and the app-private roots. These are reachable
+   on Android 10 and older, on a rooted device, or when Morphe itself writes somewhere shared.
+3. **Unreadable roots** — the folders that exist but are closed, so the UI can explain the difference between "nothing
+   there" and "not allowed to look".
+
+The folder grant is the route that works everywhere: `ACTION_OPEN_DOCUMENT_TREE` hands over one directory, the shell
+takes a persistable read grant, and `DocumentsContract.buildChildDocumentsUriUsingTree` walks it — no storage permission
+and nothing near `MANAGE_EXTERNAL_STORAGE`, which the manifest deliberately never requests. Files from a granted tree
+come back as `content://` document URIs rather than paths, and are read through `openInputStream`.
+
+Bytes come back through `morphe.read`, which refuses any path a scan did not report. The page (`src/app/morpheScan.ts`)
+turns a bundle file into a loaded bundle, a patch list into an uploaded one, and a preferences file into repository URLs
+that are matched against the known bundles one at a time, so one dead link cannot take the rest down.

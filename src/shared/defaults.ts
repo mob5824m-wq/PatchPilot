@@ -41,7 +41,6 @@ export const defaultSettings: Settings = {
   providers: {},
   preferAbi: null,
   autoRefreshMinutes: 180,
-  demoSource: false,
 };
 
 /**

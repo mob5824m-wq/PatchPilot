@@ -61,6 +61,37 @@ export interface NativeBridge {
   call(action: string, payload: unknown, onEvent?: (event: Record<string, unknown>) => void): Promise<unknown>;
 }
 
+/** One file a Morphe scan could see, with why it was listed. */
+export interface MorpheFile {
+  /** A filesystem path, or a `content://` document URI from a granted folder. */
+  path: string;
+  name: string;
+  sizeBytes: number;
+  kind: string;
+  modifiedAt?: number;
+  /** Set when the file came from a folder the user granted. */
+  folder?: string;
+}
+
+/** What `morphe.scan` found on the device, including what it could not read. */
+export interface MorpheScan {
+  installed: { package: string; version: string | null }[];
+  files: MorpheFile[];
+  /** Folders the user has granted through the system picker. */
+  folders?: { uri: string; name: string }[];
+  unreadable: { path: string; reason: string }[];
+  notes: string[];
+  rooted: boolean;
+  sdk: number;
+}
+
+export interface MorpheFileContents {
+  path: string;
+  name: string;
+  sizeBytes: number;
+  base64: string;
+}
+
 export interface DeviceState {
   freeBytes: number;
   totalBytes: number;
@@ -177,6 +208,34 @@ export class Native {
   /** Storage, install permission and notification state, for the Doctor. */
   async state(): Promise<DeviceState> {
     return this.bridge.call('device.state', {}) as Promise<DeviceState>;
+  }
+
+  /** What opened the app: a shared store link, or a launcher shortcut. */
+  async launchTarget(): Promise<{ tab?: string; packageName?: string } | null> {
+    return this.bridge.call('app.launchTarget', {}) as Promise<{ tab?: string; packageName?: string } | null>;
+  }
+
+  /** A one-off system notification; ignored when the user has notifications off. */
+  async notify(title: string, body: string): Promise<boolean> {
+    return this.bridge.call('ui.notify', { title, body }) as Promise<boolean>;
+  }
+
+  /** Asks the shell what of Morphe Manager it can see on this device. */
+  async scanMorphe(): Promise<MorpheScan> {
+    return this.bridge.call('morphe.scan', {}) as Promise<MorpheScan>;
+  }
+
+  /**
+   * Opens the system folder picker. One tap, kept across launches — the only way
+   * to read another app's folder on modern Android.
+   */
+  async pickMorpheFolder(): Promise<{ granted: boolean; uri?: string | null }> {
+    return this.bridge.call('morphe.pickFolder', {}) as Promise<{ granted: boolean; uri?: string | null }>;
+  }
+
+  /** Bytes for a file a scan reported; the shell refuses any other path. */
+  async readMorpheFile(path: string): Promise<MorpheFileContents> {
+    return this.bridge.call('morphe.read', { path }) as Promise<MorpheFileContents>;
   }
 
   /** Opens Morphe Manager, if a known package for it is installed. */

@@ -143,9 +143,7 @@ export function LibraryView({
           <p className="fine-print">
             Verified APKs land here, ready for Morphe's file picker. {entries.length} file
             {entries.length === 1 ? '' : 's'} · {bytes(libraryTotal)} on disk.{' '}
-            {standalone
-              ? 'Files are in Downloads/PatchPilot on this device — install one, or point Morphe at that folder.'
-              : 'Copy a link and open it on your phone (same Wi-Fi) to pull the file straight into it.'}
+            {'Files are in Downloads/PatchPilot on this device — install one, or point Morphe at that folder.'}
           </p>
         </div>
         <div className="library-head-actions">

@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { buildApk, buildZip, loadTestKey, testCertificateSha256 } from '../src/server/apk/fixture.ts';
-import { parseBinaryManifest } from '../src/server/apk/axml.ts';
-import { readSigningCertificates } from '../src/server/apk/signblock.ts';
-import { describeApk, verifyApk } from '../src/server/apk/verify.ts';
-import { ZipReader } from '../src/server/apk/zip.ts';
+import { buildApk, buildZip, loadTestKey, testCertificateSha256 } from '../src/core/apk/fixture.ts';
+import { parseBinaryManifest } from '../src/core/apk/axml.ts';
+import { readSigningCertificates } from '../src/core/apk/signblock.ts';
+import { describeApk, verifyApk } from '../src/core/apk/verify.ts';
+import { ZipReader } from '../src/core/apk/zip.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const helloActivity = join(here, '..', 'fixtures', 'apk', 'HelloActivity.apk');

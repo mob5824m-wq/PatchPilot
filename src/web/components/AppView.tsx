@@ -8,6 +8,7 @@ export function AppView({
   detail,
   job,
   onDownload,
+  onQueue,
   onOpenJob,
   providers,
 }: {
@@ -15,6 +16,7 @@ export function AppView({
   detail: AppDetail | null;
   job: DownloadJob | null;
   onDownload: (version: string | null) => void;
+  onQueue: () => void;
   onOpenJob: () => void;
   providers: ProviderInfo[];
 }): ReactNode {
@@ -124,6 +126,15 @@ export function AppView({
           <div className="download-actions">
             <button type="button" className="primary-button" disabled={busy || !activeVersion} onClick={() => onDownload(activeVersion)}>
               {busy ? 'Working…' : `Download APK for ${activeVersion ?? '—'}`}
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!activeVersion}
+              title="Download this later, after the other apps already queued"
+              onClick={onQueue}
+            >
+              ⧉ Add to queue
             </button>
             {job ? (
               <button type="button" className="ghost-button" onClick={onOpenJob}>

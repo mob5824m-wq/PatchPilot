@@ -100,6 +100,39 @@ export interface CatalogResponse {
   morphe: { loaded: number; available: number };
 }
 
+/**
+ * What the last read of Morphe Manager found. Kept in settings so the Bundles tab
+ * and the Doctor can report it without scanning again.
+ */
+export interface MorpheDiscovery {
+  scannedAt: string;
+  installed: { package: string; version: string | null }[];
+  filesRead: number;
+  sources: string[];
+  /** Folders the user granted through the system picker, which were read. */
+  folders: string[];
+  enabled: string[];
+  added: string[];
+  notes: string[];
+  found: boolean;
+}
+
+/** Answer of `GET /api/update`: the newest published release against this build. */
+export interface UpdateCheck {
+  current: string;
+  latest: string | null;
+  url: string | null;
+  newer: boolean;
+  error: string | null;
+}
+
+/** Answer of `POST /api/morphe/scan`: whether the platform allows it, and what came back. */
+export interface MorpheScanResponse {
+  supported: boolean;
+  discovery: MorpheDiscovery | null;
+  notes: string[];
+}
+
 export interface BundleImportResult {
   bundles: BundleInfo[];
   enabled: string[];
@@ -246,7 +279,10 @@ export interface Settings {
   /** Ask mirrors to serve the ABI-specific build when the bundle pins version codes. */
   preferAbi: string | null;
   autoRefreshMinutes: number;
-  demoSource: boolean;
+  /** Only the phone can read Morphe, so this is absent in server mode. */
+  morpheScan?: MorpheDiscovery | null;
+  /** `<package>@<version>` keys already announced, so nothing nags twice. */
+  announcedAlerts?: string[];
 }
 
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip';
@@ -272,7 +308,6 @@ export interface HealthResponse {
   version: string;
   /** Short commit SHA when the server knows which build it is. */
   commit?: string | null;
-  demoSource: boolean;
   dataDir: string;
   libraryDir: string;
   node: string;

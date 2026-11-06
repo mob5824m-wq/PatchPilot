@@ -53,6 +53,7 @@ public class MainActivity extends Activity {
 
         shell = new NativeShell(this, webView);
         webView.addJavascriptInterface(shell, "PatchPilotNative");
+        shell.setLaunchTarget(LaunchTarget.from(getIntent()));
 
         setContentView(webView, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -171,8 +172,29 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * A share or a store link while the app is already open. The target is kept
+     * for the next page load and pushed into the running page immediately.
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        org.json.JSONObject target = LaunchTarget.from(intent);
+        if (target == null) return;
+        shell.setLaunchTarget(target);
+        if (webView != null) {
+            webView.evaluateJavascript(
+                    "window.__patchpilotLaunch && window.__patchpilotLaunch(" + target + ")", null);
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == NativeShell.REQUEST_FOLDER) {
+            if (shell != null) shell.onFolderPicked(resultCode, data);
+            return;
+        }
         if (requestCode == REQUEST_FILE_CHOOSER) {
             if (filePathCallback == null) return;
             Uri[] results = null;

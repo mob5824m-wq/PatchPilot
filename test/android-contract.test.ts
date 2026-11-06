@@ -24,7 +24,12 @@ function matches(source: string, pattern: RegExp): string[] {
 }
 
 test('every action the page calls exists in the shell, and vice versa', () => {
-  const implemented = new Set(matches(nativeShell, /case\s+"([^"]+)":/g));
+  // Actions dispatched from the switch, plus the ones a constant names because
+  // they are answered later (the folder picker waits for its activity result).
+  const implemented = new Set([
+    ...matches(nativeShell, /case\s+"([^"]+)":/g),
+    ...matches(nativeShell, /static final String ACTION_[A-Z_]+\s*=\s*"([^"]+)"/g),
+  ]);
   const used = new Set(matches(nativeTs, /this\.bridge\.call\(\s*'([^']+)'/g));
 
   assert.ok(used.size >= 10, `expected the full action list, found ${used.size}`);
@@ -168,4 +173,67 @@ test('the launch theme exists and matches the badge', () => {
   // One colour of record: the plate in the logo is the window background.
   assert.match(colours, /<color name="launch_background">#080b10<\/color>/);
   assert.match(logo, /#080d13/, 'brand/logo.svg should carry the same dark plate');
+});
+
+test('the folder grant is the one way in, and it needs no storage permission', () => {
+  const shell = nativeShell;
+  const scanner = readFileSync(join(javaDir, 'MorpheScanner.java'), 'utf8');
+  const activity = readFileSync(join(javaDir, 'MainActivity.java'), 'utf8');
+
+  // The picker itself.
+  assert.match(shell, /Intent\.ACTION_OPEN_DOCUMENT_TREE/);
+  assert.match(shell, /FLAG_GRANT_PERSISTABLE_URI_PERMISSION/);
+  assert.match(shell, /takePersistableUriPermission/);
+  assert.match(activity, /NativeShell\.REQUEST_FOLDER/);
+  assert.match(activity, /onFolderPicked\(resultCode, data\)/);
+
+  // Reading the granted tree uses DocumentsContract, not a file path.
+  assert.match(scanner, /getPersistedUriPermissions\(\)/);
+  assert.match(scanner, /buildChildDocumentsUriUsingTree/);
+  assert.match(scanner, /openInputStream/);
+
+  // And it is not a back door to the whole filesystem: all-files access is
+  // deliberately not requested.
+  assert.doesNotMatch(manifest, /MANAGE_EXTERNAL_STORAGE/);
+  assert.doesNotMatch(manifest, /READ_MEDIA_/);
+});
+
+test('a store link, a share and a shortcut all land in the shell', () => {
+  // The manifest has to accept the four ways in that LaunchTarget can parse.
+  const viewFilters = matches(manifest, /android:(?:scheme|host)="([^"]+)"/g);
+  for (const entry of ['market', 'play.google.com', 'patchpilot']) {
+    assert.ok(viewFilters.includes(entry), `nothing in the manifest accepts ${entry}`);
+  }
+  assert.match(manifest, /android:mimeType="text\/plain"/, 'sharing a link to PatchPilot should work');
+  assert.match(manifest, /android\.app\.shortcuts/, 'the shortcuts resource is not declared');
+
+  // Shortcuts: declared labels and icons must exist, and they must come back here.
+  const shortcutsFile = join(root, 'android', 'app', 'src', 'main', 'res', 'xml', 'shortcuts.xml');
+  assert.ok(existsSync(shortcutsFile), 'shortcuts.xml is missing');
+  const shortcuts = readFileSync(shortcutsFile, 'utf8');
+  const defined = new Set(matches(strings, /<string name="([^"]+)"/g));
+  const drawables = join(root, 'android', 'app', 'src', 'main', 'res', 'drawable');
+  const ids = matches(shortcuts, /android:shortcutId="([^"]+)"/g);
+  assert.ok(ids.length >= 3, 'expected a shortcut per tab that is worth opening directly');
+  for (const name of matches(shortcuts, /@string\/([A-Za-z0-9_]+)/g)) {
+    assert.ok(defined.has(name), `shortcuts.xml references @string/${name}, which is not defined`);
+  }
+  for (const name of matches(shortcuts, /@drawable\/([A-Za-z0-9_]+)/g)) {
+    assert.ok(existsSync(join(drawables, `${name}.xml`)), `shortcut icon ${name} is missing`);
+  }
+  for (const target of matches(shortcuts, /android:targetPackage="([^"]+)"/g)) {
+    assert.equal(target, 'app.patchpilot', 'a shortcut points at another app');
+  }
+  for (const data of matches(shortcuts, /android:data="([^"]+)"/g)) {
+    assert.match(data, /^patchpilot:\/\/[a-z]+$/, `${data} is not a link the app can parse`);
+  }
+});
+
+test('the page asks for a launch target the same way the shell clears it', () => {
+  assert.match(nativeShell, /case "app\.launchTarget"/, 'the shell must answer app.launchTarget');
+  assert.match(nativeShell, /launchTarget = null/, 'the target is read once, not on every reload');
+  assert.match(nativeTs, /bridge\.call\('app\.launchTarget'/, 'the page must ask for the target');
+  assert.match(nativeShell, /case "ui\.notify"/, 'the shell must be able to post a notification');
+  assert.match(nativeTs, /bridge\.call\('ui\.notify'/, 'the page must be able to ask for one');
+  assert.match(nativeShell, /POST_NOTIFICATIONS/, 'Android 13 needs the notification permission');
 });

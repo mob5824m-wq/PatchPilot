@@ -9,6 +9,7 @@ import type {
   LibraryEntry,
   ProviderInfo,
   Settings,
+  UpdateCheck,
 } from '../shared/types.ts';
 import { api, watchJob } from './api.ts';
 import { AppList } from './components/AppList.tsx';
@@ -21,8 +22,20 @@ import { LibraryView } from './components/LibraryView.tsx';
 import { SourcesView } from './components/SourcesView.tsx';
 import { Badge, Spinner, ToastProvider, useToast } from './components/ui.tsx';
 import { relativeTime } from './format.ts';
+import {
+  clearQueue,
+  emptyQueue,
+  enqueue,
+  finishCurrent,
+  nextItem,
+  queueSummary,
+  startNext,
+  type QueueState,
+} from './queue.ts';
 
 type Tab = 'apps' | 'library' | 'sources' | 'bundles' | 'doctor';
+
+const TABS: Tab[] = ['apps', 'library', 'sources', 'bundles', 'doctor'];
 
 function Shell(): ReactNode {
   const toast = useToast();
@@ -39,6 +52,47 @@ function Shell(): ReactNode {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [update, setUpdate] = useState<UpdateCheck | null>(null);
+  const [updateHidden, setUpdateHidden] = useState(false);
+  const [queue, setQueue] = useState<QueueState>(emptyQueue);
+  /** The job the queue itself started; only its outcome advances the queue. */
+  const [queuedJobId, setQueuedJobId] = useState<string | null>(null);
+
+  // A shared store link or a launcher shortcut decides where the app opens.
+  useEffect(() => {
+    const apply = (target: { tab?: string; packageName?: string } | null): void => {
+      if (!target) return;
+      if (target.packageName) {
+        setSelected(target.packageName);
+        setTab('apps');
+        return;
+      }
+      if (target.tab && (TABS as string[]).includes(target.tab)) setTab(target.tab as Tab);
+    };
+
+    void api
+      .launch()
+      .then((result) => apply(result.target))
+      .catch(() => undefined);
+
+    const handler = (event: Event): void => apply((event as CustomEvent).detail ?? null);
+    window.addEventListener('patchpilot:launch', handler);
+
+    const host = window as unknown as { __patchpilotPending?: { tab?: string; packageName?: string } | null };
+    if (host.__patchpilotPending) {
+      apply(host.__patchpilotPending);
+      host.__patchpilotPending = null;
+    }
+
+    return () => window.removeEventListener('patchpilot:launch', handler);
+  }, []);
+
+  useEffect(() => {
+    void api
+      .update()
+      .then(setUpdate)
+      .catch(() => undefined);
+  }, []);
 
   const loadCatalog = useCallback(
     async (refresh = false) => {
@@ -123,6 +177,37 @@ function Shell(): ReactNode {
     [app, toast],
   );
 
+  // One download at a time, in the order they were queued.
+  useEffect(() => {
+    if (queue.current >= 0) return;
+    const item = nextItem(queue);
+    if (!item) return;
+    const busy = job ? !['done', 'failed', 'cancelled'].includes(job.state) : false;
+    if (busy) return;
+
+    setQueue(startNext(queue));
+    void api
+      .startDownload(item.packageName, item.version)
+      .then((started) => {
+        setQueuedJobId(started.id);
+        setJob(started);
+      })
+      .catch((cause: Error) => {
+        toast.push(`Could not queue ${item.appName}: ${cause.message}`, 'bad');
+        setQueue(finishCurrent(queue, false));
+      });
+  }, [queue, job, toast]);
+
+  useEffect(() => {
+    if (queue.current < 0 || !job) return;
+    if (job.id !== queuedJobId) return;
+    if (!['done', 'failed', 'cancelled'].includes(job.state)) return;
+    setQueuedJobId(null);
+    setQueue(finishCurrent(queue, job.state === 'done'));
+  }, [job, queue, queuedJobId]);
+
+  const queuedSummary = queueSummary(queue);
+
   const bundleSummary = useMemo(() => {
     const active = bundles.filter((bundle) => bundle.enabled);
     const patches = active.reduce((total, bundle) => total + bundle.patchCount, 0);
@@ -157,6 +242,16 @@ function Shell(): ReactNode {
         </nav>
 
         <div className="topbar-meta">
+          {queuedSummary ? (
+            <button
+              type="button"
+              className="badge badge-accent"
+              title="Apps waiting to be downloaded one after another"
+              onClick={() => setQueue((current) => clearQueue(current))}
+            >
+              ⧉ {queuedSummary}
+            </button>
+          ) : null}
           <Badge tone="accent" title="Patches across the bundles your Morphe has loaded">
             {bundleSummary.patches} patches
           </Badge>
@@ -166,10 +261,17 @@ function Shell(): ReactNode {
         </div>
       </header>
 
-      {health?.demoSource ? (
-        <div className="banner banner-warn">
-          Offline demo source is on: downloads are generated stand-ins signed with PatchPilot's test key. Turn it off in
-          Sources to only use real mirrors.
+      {update?.newer && !updateHidden ? (
+        <div className="banner banner-good">
+          PatchPilot {update.latest} is out — you are on {update.current}.{' '}
+          {update.url ? (
+            <a href={update.url} target="_blank" rel="noreferrer">
+              Download the APK
+            </a>
+          ) : null}{' '}
+          <button type="button" className="link-button" onClick={() => setUpdateHidden(true)}>
+            Later
+          </button>
         </div>
       ) : null}
 
@@ -188,6 +290,17 @@ function Shell(): ReactNode {
                   detail={detail}
                   job={job}
                   onDownload={startDownload}
+                  onQueue={() =>
+                    app && app.recommendedVersion
+                      ? setQueue((current) =>
+                          enqueue(current, {
+                            packageName: app.packageName,
+                            appName: app.name,
+                            version: app.recommendedVersion!,
+                          }),
+                        )
+                      : undefined
+                  }
                   onOpenJob={() => setJob(job)}
                   providers={providers}
                 />

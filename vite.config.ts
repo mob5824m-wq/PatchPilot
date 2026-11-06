@@ -11,10 +11,4 @@ export default defineConfig({
     outDir: fileURLToPath(new URL('./dist/web', import.meta.url)),
     emptyOutDir: true,
   },
-  server: {
-    // The express server mounts Vite in middleware mode, so Vite only needs to
-    // serve assets for the host the preview/browser is using.
-    allowedHosts: true,
-    host: '0.0.0.0',
-  },
 });

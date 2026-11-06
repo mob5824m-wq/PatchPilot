@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the launcher icon: the three places worth going straight to. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_library"
+        android:shortcutId="library"
+        android:shortcutLongLabel="@string/shortcut_library_long"
+        android:shortcutShortLabel="@string/shortcut_library">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="patchpilot://library"
+            android:targetClass="app.patchpilot.MainActivity"
+            android:targetPackage="app.patchpilot" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_bundles"
+        android:shortcutId="bundles"
+        android:shortcutLongLabel="@string/shortcut_bundles_long"
+        android:shortcutShortLabel="@string/shortcut_bundles">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="patchpilot://bundles"
+            android:targetClass="app.patchpilot.MainActivity"
+            android:targetPackage="app.patchpilot" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_doctor"
+        android:shortcutId="doctor"
+        android:shortcutLongLabel="@string/shortcut_doctor_long"
+        android:shortcutShortLabel="@string/shortcut_doctor">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="patchpilot://doctor"
+            android:targetClass="app.patchpilot.MainActivity"
+            android:targetPackage="app.patchpilot" />
+    </shortcut>
+</shortcuts>

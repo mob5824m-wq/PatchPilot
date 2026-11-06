@@ -88,18 +88,6 @@ jobs:
         if: steps.version.outputs.release == 'true'
         run: npm run build
 
-      - name: Package the server tarball
-        if: steps.version.outputs.release == 'true'
-        run: |
-          set -euo pipefail
-          version="${{ steps.version.outputs.version }}"
-          staging="dist-release/patchpilot-$version"
-          mkdir -p "$staging"
-          cp -r dist src config fixtures "$staging"/
-          cp package.json package-lock.json README.md LICENSE "$staging"/
-          tar -czf "patchpilot-$version.tar.gz" -C dist-release "patchpilot-$version"
-          ls -lh "patchpilot-$version.tar.gz"
-
       - uses: actions/setup-java@v4
         if: steps.version.outputs.release == 'true'
         with:
@@ -129,8 +117,7 @@ jobs:
       - name: Checksums
         if: steps.version.outputs.release == 'true'
         run: |
-          sha256sum "patchpilot-${{ steps.version.outputs.version }}.tar.gz" \
-                    "patchpilot-android-${{ steps.version.outputs.version }}.apk" > SHA256SUMS
+          sha256sum "patchpilot-android-${{ steps.version.outputs.version }}.apk" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Keep the APK as a workflow artifact too
@@ -155,7 +142,6 @@ jobs:
           gh release create "${{ steps.version.outputs.tag }}" \
             --title "PatchPilot ${{ steps.version.outputs.version }}" \
             --notes-file release-notes.md \
-            "patchpilot-${{ steps.version.outputs.version }}.tar.gz" \
             "patchpilot-android-${{ steps.version.outputs.version }}.apk" \
             SHA256SUMS
 
